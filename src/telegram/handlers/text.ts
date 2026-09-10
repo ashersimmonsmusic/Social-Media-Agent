@@ -69,8 +69,9 @@ export function registerTextHandler(bot: Telegraf) {
       const reply = await converseWithAsher({ telegram: ctx.telegram, telegramChatId: chatId, message: text });
       await ctx.reply(reply || "I didn't have anything useful to say to that — try me again?");
     } catch (error) {
-      logger.error("conversation_failed", { error: String(error) });
-      await ctx.reply("I couldn't think that through just now — something went wrong on my end. Nothing was saved or sent.");
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.error("conversation_failed", { error: detail });
+      await ctx.reply(`Hit an error — here's the detail so we can fix it:\n\n${detail.slice(0, 400)}`);
     }
   });
 }
