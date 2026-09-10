@@ -79,3 +79,23 @@ the resulting rows (Asset, Approval, AuditLog, AIUsageLog).
 See `ARCHITECTURE.md` §11 and `Dockerfile` — set the same environment variables in your
 host's dashboard (never commit real secrets), provision a Postgres add-on, and run
 `prisma migrate deploy` before starting the app (the `Dockerfile`'s `CMD` already does this).
+
+### Railway specifics
+
+1. Add a Postgres service to the project: **+ New → Database → Add PostgreSQL**.
+2. On the **app** service → Variables, set `DATABASE_URL` to the reference
+   `${{Postgres.DATABASE_URL}}` (substituting your database service's actual name if it
+   isn't `Postgres`). Use the reference rather than pasting the connection string —
+   Railway rotates those credentials and a pasted copy goes stale silently.
+   **Do not use the `localhost` value from `.env.example`** — on Railway that points at
+   the app's own container, where no database is running.
+3. Set the other required variables on the app service too, or startup will fail (it
+   validates everything up front and logs exactly what's missing): `TELEGRAM_BOT_TOKEN`,
+   `TELEGRAM_ALLOWED_CHAT_ID`, `ANTHROPIC_API_KEY`, `ADMIN_API_KEY`, plus
+   `NODE_ENV=production`.
+4. Leave `TELEGRAM_USE_WEBHOOK` unset — long-polling needs no public URL. Only switch to
+   webhook mode once you also set `PUBLIC_BASE_URL` (your Railway domain) and
+   `TELEGRAM_WEBHOOK_SECRET`.
+
+A healthy deploy logs the `20250101000000_init` migration being applied, then
+`telegram.polling_started` and `http.listening`.
