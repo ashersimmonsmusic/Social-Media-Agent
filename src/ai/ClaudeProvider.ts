@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { logger } from "../lib/logger.js";
 import type {
   AIProvider,
   ConversationTurn,
@@ -10,12 +11,43 @@ import type {
 
 const DEFAULT_MAX_ITERATIONS = 8;
 
+/**
+ * Adaptive thinking only exists on Claude 4.6-and-newer models, but the model
+ * is set by env var and can be changed without a redeploy. Rather than keep a
+ * version list here that goes stale, try it once per model and remember when
+ * the API rejects it, so an older model degrades instead of failing outright.
+ */
+const adaptiveThinkingRejectedBy = new Set<string>();
+
+function isAdaptiveThinkingUnsupported(error: unknown): boolean {
+  const err = error as { status?: number; message?: string } | null;
+  return err?.status === 400 && /thinking/i.test(err.message ?? "");
+}
+
 export class ClaudeProvider implements AIProvider {
   readonly name = "anthropic";
   private readonly client: Anthropic;
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });
+  }
+
+  /** Sends a request with adaptive thinking, retrying without it if the model can't do it. */
+  private async createWithOptionalThinking(
+    params: Omit<Anthropic.MessageCreateParamsNonStreaming, "thinking">,
+  ): Promise<Anthropic.Message> {
+    if (adaptiveThinkingRejectedBy.has(params.model)) {
+      return this.client.messages.create(params);
+    }
+
+    try {
+      return await this.client.messages.create({ ...params, thinking: { type: "adaptive" } });
+    } catch (error) {
+      if (!isAdaptiveThinkingUnsupported(error)) throw error;
+      adaptiveThinkingRejectedBy.add(params.model);
+      logger.warn("ai.adaptive_thinking_unsupported", { model: params.model });
+      return this.client.messages.create(params);
+    }
   }
 
   async generate(model: string, prompt: string, options?: GenerateOptions): Promise<GenerateResult> {
@@ -63,10 +95,9 @@ export class ClaudeProvider implements AIProvider {
     const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
-      const response = await this.client.messages.create({
+      const response = await this.createWithOptionalThinking({
         model,
         max_tokens: 16000,
-        thinking: { type: "adaptive" },
         system: options.system,
         tools,
         messages,
