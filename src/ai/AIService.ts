@@ -9,10 +9,11 @@ import type { AIProvider, GenerateOptions, GenerateResult, TaskType } from "./ty
 // in brief §49. Update as pricing changes; Phase 2 can source this from a
 // config file if it needs to be more precise.
 const PRICING_PER_MILLION_TOKENS: Record<string, { input: number; output: number }> = {
-  "claude-opus-4-5-20251101": { input: 15, output: 75 },
-  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+  "claude-opus-5": { input: 5, output: 25 },
+  "claude-sonnet-5": { input: 2, output: 10 },
+  "claude-haiku-4-5": { input: 1, output: 5 },
 };
-const DEFAULT_PRICING = { input: 3, output: 15 };
+const DEFAULT_PRICING = { input: 5, output: 25 };
 
 // Standing instruction applied to every generation so the agent never
 // fabricates biography, achievements, relationships, or credits that
@@ -52,23 +53,28 @@ export class AIService {
   }
 
   private async logUsage(taskType: TaskType, result: GenerateResult) {
-    const pricing = PRICING_PER_MILLION_TOKENS[result.model] ?? DEFAULT_PRICING;
-    const estimatedCostUsd =
-      (result.promptTokens / 1_000_000) * pricing.input + (result.completionTokens / 1_000_000) * pricing.output;
-
-    await prisma.aIUsageLog.create({
-      data: {
-        provider: result.provider,
-        model: result.model,
-        taskType,
-        promptTokens: result.promptTokens,
-        completionTokens: result.completionTokens,
-        estimatedCostUsd,
-      },
-    });
-
-    logger.info("ai.usage", { taskType, model: result.model, estimatedCostUsd: estimatedCostUsd.toFixed(4) });
+    await recordUsage(taskType, result);
   }
+}
+
+/** Records what a call cost. Every path that reaches the provider goes through here. */
+export async function recordUsage(taskType: TaskType, result: GenerateResult) {
+  const pricing = PRICING_PER_MILLION_TOKENS[result.model] ?? DEFAULT_PRICING;
+  const estimatedCostUsd =
+    (result.promptTokens / 1_000_000) * pricing.input + (result.completionTokens / 1_000_000) * pricing.output;
+
+  await prisma.aIUsageLog.create({
+    data: {
+      provider: result.provider,
+      model: result.model,
+      taskType,
+      promptTokens: result.promptTokens,
+      completionTokens: result.completionTokens,
+      estimatedCostUsd,
+    },
+  });
+
+  logger.info("ai.usage", { taskType, model: result.model, estimatedCostUsd: estimatedCostUsd.toFixed(4) });
 }
 
 export async function getMonthToDateAiSpend(): Promise<number> {
@@ -83,4 +89,5 @@ export async function getMonthToDateAiSpend(): Promise<number> {
   return rows.reduce((sum, row) => sum + row.estimatedCostUsd, 0);
 }
 
-export const aiService = new AIService(new ClaudeProvider(env.ANTHROPIC_API_KEY));
+export const aiProvider: AIProvider = new ClaudeProvider(env.ANTHROPIC_API_KEY);
+export const aiService = new AIService(aiProvider);

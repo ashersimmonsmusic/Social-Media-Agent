@@ -18,6 +18,34 @@ export interface GenerateResult {
   completionTokens: number;
 }
 
+/** A tool the agent may call during a conversation, described provider-neutrally. */
+export interface AgentTool {
+  name: string;
+  description: string;
+  /** JSON Schema for the tool's input. */
+  inputSchema: Record<string, unknown>;
+}
+
+/** Runs a tool call and returns its result as text for the model to read. */
+export type ToolExecutor = (name: string, input: unknown) => Promise<string>;
+
+export interface ConversationTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ConverseOptions {
+  system: string;
+  tools: AgentTool[];
+  executeTool: ToolExecutor;
+  maxIterations?: number;
+}
+
+export interface ConverseResult extends GenerateResult {
+  /** Names of tools called while producing this reply, in order, for auditing. */
+  toolsCalled: string[];
+}
+
 /**
  * Every AI backend (Claude, and later OpenAI or others) implements this.
  * AIService is the only thing callers talk to — no module imports a
@@ -26,4 +54,6 @@ export interface GenerateResult {
 export interface AIProvider {
   readonly name: string;
   generate(model: string, prompt: string, options?: GenerateOptions): Promise<GenerateResult>;
+  /** Runs a tool-using conversation to completion and returns the final reply. */
+  converse(model: string, history: ConversationTurn[], options: ConverseOptions): Promise<ConverseResult>;
 }

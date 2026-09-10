@@ -20,7 +20,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.125.0",
     "@prisma/client": "^5.22.0",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",

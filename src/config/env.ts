@@ -18,8 +18,8 @@ const envSchema = z.object({
   PUBLIC_BASE_URL: z.string().optional(),
 
   ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
-  AI_MODEL_STRATEGY: z.string().default("claude-opus-4-5-20251101"),
-  AI_MODEL_FAST: z.string().default("claude-haiku-4-5-20251001"),
+  AI_MODEL_STRATEGY: z.string().default("claude-opus-5"),
+  AI_MODEL_FAST: z.string().default("claude-haiku-4-5"),
 
   ADMIN_API_KEY: z.string().min(1, "ADMIN_API_KEY is required"),
 

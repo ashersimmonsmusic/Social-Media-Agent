@@ -6,6 +6,8 @@ import { getApproval, updateApprovalPayload, type ApprovalPayload } from "../../
 import { renderApprovalMessage } from "../approvals.render.js";
 import { takeAwaitingEdit } from "../editState.js";
 import { COMMANDS } from "../commands/trigger.js";
+import { converseWithAsher } from "../../ai/ConversationService.js";
+import { logger } from "../../lib/logger.js";
 
 /**
  * Handles plain text messages that are NOT commands. Registered last so
@@ -51,7 +53,35 @@ export function registerTextHandler(bot: Telegraf) {
       return;
     }
 
-    const asset = await ingestText({ text, source: "telegram" });
-    await ctx.reply(`Filed as a ${asset.assetType.toLowerCase()} asset (${asset.id}).`);
+    // A bare link is unambiguous — file it rather than spending a model call
+    // deciding what an obvious reference link is.
+    if (isBareUrl(text)) {
+      const asset = await ingestText({ text, source: "telegram" });
+      await ctx.reply(`Filed that link (${asset.id}). Want me to read it and learn from it? Use /learn ${text.trim()}`);
+      return;
+    }
+
+    // Everything else is a conversation. The agent decides whether Asher is
+    // asking something or handing over content to keep, and uses its tools
+    // accordingly — none of which can publish, send, or spend.
+    await ctx.sendChatAction("typing");
+    try {
+      const reply = await converseWithAsher({ telegram: ctx.telegram, telegramChatId: chatId, message: text });
+      await ctx.reply(reply || "I didn't have anything useful to say to that — try me again?");
+    } catch (error) {
+      logger.error("conversation_failed", { error: String(error) });
+      await ctx.reply("I couldn't think that through just now — something went wrong on my end. Nothing was saved or sent.");
+    }
   });
+}
+
+function isBareUrl(text: string): boolean {
+  const trimmed = text.trim();
+  if (/\s/.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }

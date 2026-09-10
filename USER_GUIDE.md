@@ -2,15 +2,32 @@
 
 Everything happens in your Telegram chat with the bot. This is what works today.
 
+## Just talk to it
+
+You can have a normal conversation with the bot — no commands needed. Ask it things like:
+
+- "What should I post this week?"
+- "What content have I got that I haven't used?"
+- "Write me something for the new single"
+- "What do you actually know about me?"
+
+It remembers the conversation, can look things up (your content library, what it knows
+about you, your brand, what's awaiting approval), and can write drafts. `/reset` starts a
+fresh conversation if it's gone off track.
+
+**What it can't do:** publish, post, send emails or DMs, spend money, or read analytics.
+Not "won't" — it has no ability to. Anything meant to go out into the world comes back to
+you as an approval card with buttons first.
+
 ## Sending content in
 
-Just send the bot a photo, video, voice note, audio file, or document — it files it
-straight into your content library and tells you what it filed it as. Paste in a quote,
-lyric, or piece of text the same way; if you paste a link, it's filed as a reference link
-rather than a text note.
+Send the bot a photo, video, voice note, audio file, or document — it files it straight
+into your content library and tells you what it filed it as. Send a bare link and it files
+it as a reference.
 
-You don't need to say anything else — no captions or commands required to file something.
-Add a description or tags later if you want to.
+If you type something that's clearly content rather than a message to it — a quote, a
+lyric, an idea — it'll save it to the library and tell you it has. If you're not sure it
+understood, just say "save that" and it will.
 
 ## Commands
 
