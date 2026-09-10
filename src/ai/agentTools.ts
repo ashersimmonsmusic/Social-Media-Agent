@@ -77,4 +77,25 @@ export const AGENT_TOOLS: AgentTool[] = [
       required: ["title", "summary", "content"],
     },
   },
+  {
+    name: "propose_behavior_rule",
+    description:
+      "Propose a standing instruction for Asher to approve — use ONLY when he explicitly tells you to change how you " +
+      "respond: 'stop doing X', 'always lead with Y', 'I prefer when you Z'. Once approved the rule is loaded into " +
+      "every future conversation as a permanent instruction. Never call this unprompted or for a one-off request.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        rule: {
+          type: "string",
+          description: "The rule as a clear, actionable instruction. E.g. 'Always lead with TikTok when suggesting platforms, not Instagram.'",
+        },
+        rationale: {
+          type: "string",
+          description: "One sentence on what behaviour this changes and why Asher asked for it.",
+        },
+      },
+      required: ["rule", "rationale"],
+    },
+  },
 ];

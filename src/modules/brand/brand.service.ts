@@ -1,4 +1,4 @@
-import type { BrandRuleCategory, BrandRuleKind } from "@prisma/client";
+import type { BrandRuleCategory, BrandRuleKind, BrandRuleSource } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { recordAudit } from "../audit/audit.service.js";
 
@@ -66,7 +66,7 @@ export async function addBrandRule(input: {
   category: BrandRuleCategory;
   kind: BrandRuleKind;
   description: string;
-  source: "BRAND_BOOK_IMPORT" | "ASHER_CORRECTION" | "MANUAL";
+  source: BrandRuleSource;
 }) {
   const profile = await getOrCreateBrandProfile();
   const rule = await prisma.brandRule.create({

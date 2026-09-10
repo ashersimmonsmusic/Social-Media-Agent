@@ -47,6 +47,7 @@ enum BrandRuleCategory {
   VISUAL
   VOICE
   SAFETY
+  BEHAVIOR
 }
 
 enum BrandRuleKind {
@@ -62,6 +63,7 @@ enum BrandRuleSource {
   BRAND_BOOK_IMPORT
   ASHER_CORRECTION
   MANUAL
+  AGENT_PROPOSED
 }
 
 model BrandRule {
@@ -201,6 +203,7 @@ enum ApprovalType {
   SOCIAL_POST
   OUTREACH
   KNOWLEDGE_IMPORT
+  BEHAVIOR_RULE
 }
 
 enum ApprovalLevel {

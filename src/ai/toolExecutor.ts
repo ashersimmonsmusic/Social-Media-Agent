@@ -90,6 +90,25 @@ export function buildToolExecutor(telegram: Telegram) {
         return `Sent to Asher as approval ${approval.id}. He must press a button — nothing has been published or sent.`;
       }
 
+      case "propose_behavior_rule": {
+        const rule = String(input.rule ?? "").trim();
+        const rationale = String(input.rationale ?? "").trim();
+        if (!rule) return "No rule text provided — nothing to propose.";
+
+        const payload: ApprovalPayload = {
+          title: "New standing instruction",
+          summary: rationale || "Proposed by the agent based on your feedback.",
+          fields: {
+            "Instruction": rule,
+            "Why": rationale || "(no rationale given)",
+          },
+          actions: ["APPROVE", "REJECT"],
+        };
+        const approval = await createApproval({ type: "BEHAVIOR_RULE", level: "LEVEL_2", payload });
+        await sendApprovalToTelegram(telegram, approval);
+        return `Sent as a standing-instruction proposal (${approval.id}). Once Asher approves, I'll follow this in every conversation.`;
+      }
+
       default:
         return `Unknown tool: ${name}`;
     }

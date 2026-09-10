@@ -18,4 +18,5 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "learn", description: "Learn facts about you from a web page" },
   { command: "knowledge", description: "What I currently know about you" },
   { command: "reset", description: "Start a fresh conversation" },
+  { command: "rules", description: "Your standing instructions for how I behave" },
 ];

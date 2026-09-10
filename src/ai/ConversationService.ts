@@ -5,6 +5,7 @@ import { logger } from "../lib/logger.js";
 import { aiProvider, recordUsage } from "./AIService.js";
 import { AGENT_TOOLS } from "./agentTools.js";
 import { buildToolExecutor } from "./toolExecutor.js";
+import { listActiveBrandRules } from "../modules/brand/brand.service.js";
 import type { ConversationTurn } from "./types.js";
 
 /** How many past turns to replay as context. Keeps cost bounded on a long-running chat. */
@@ -30,6 +31,13 @@ WHAT YOU CAN DO:
 If he asks you to do something you genuinely cannot do yet (publish to Instagram, send an email, look at analytics), say so plainly and say what you can do instead. Do not pretend, and do not promise it for later.
 
 Match his register. He is a working artist, not a corporate client.`;
+
+async function buildSystemPrompt(): Promise<string> {
+  const rules = await listActiveBrandRules("BEHAVIOR");
+  if (rules.length === 0) return AGENT_SYSTEM_PROMPT;
+  const list = rules.map((r, i) => `${i + 1}. ${r.description}`).join("\n");
+  return `${AGENT_SYSTEM_PROMPT}\n\nASHER'S STANDING INSTRUCTIONS — he approved each of these, treat them as non-negotiable:\n${list}`;
+}
 
 export async function loadHistory(telegramChatId: string): Promise<ConversationTurn[]> {
   const rows = await prisma.aIConversation.findMany({
@@ -66,8 +74,9 @@ export async function converseWithAsher(params: {
   const history = await loadHistory(params.telegramChatId);
   history.push({ role: "user", content: params.message });
 
+  const system = await buildSystemPrompt();
   const result = await aiProvider.converse(env.AI_MODEL_STRATEGY, history, {
-    system: AGENT_SYSTEM_PROMPT,
+    system,
     tools: AGENT_TOOLS,
     executeTool: buildToolExecutor(params.telegram),
   });
