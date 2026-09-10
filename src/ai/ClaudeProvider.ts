@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../lib/logger.js";
 import type {
+  AiAttachment,
   AIProvider,
   ConversationTurn,
   ConverseOptions,
@@ -51,12 +52,19 @@ export class ClaudeProvider implements AIProvider {
   }
 
   async generate(model: string, prompt: string, options?: GenerateOptions): Promise<GenerateResult> {
+    // Attachments go before the prompt text: the model reads the file, then the
+    // instruction about what to do with it.
+    const content: Anthropic.ContentBlockParam[] = [
+      ...(options?.attachments ?? []).map(attachmentToBlock),
+      { type: "text", text: prompt },
+    ];
+
     const response = await this.client.messages.create({
       model,
       max_tokens: options?.maxTokens ?? 1024,
       temperature: options?.temperature,
       system: options?.system,
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content }],
     });
 
     const text = response.content
@@ -190,6 +198,21 @@ function withHistoryCacheBreakpoint(messages: Anthropic.MessageParam[]): Anthrop
   const copy = [...messages];
   copy[copy.length - 1] = { ...last, content: blocks };
   return copy;
+}
+
+function attachmentToBlock(attachment: AiAttachment): Anthropic.ContentBlockParam {
+  const data = attachment.data.toString("base64");
+  if (attachment.kind === "pdf") {
+    return {
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data },
+      ...(attachment.filename ? { title: attachment.filename } : {}),
+    };
+  }
+  return {
+    type: "image",
+    source: { type: "base64", media_type: attachment.mediaType as Anthropic.Base64ImageSource["media_type"], data },
+  };
 }
 
 function textOf(content: Anthropic.ContentBlock[]): string {

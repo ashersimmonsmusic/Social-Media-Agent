@@ -1,7 +1,8 @@
 import type { Telegraf } from "telegraf";
 import { createApproval, type ApprovalPayload } from "../../modules/approvals/approval.service.js";
 import { registerApprovalAction } from "../../modules/approvals/actions.js";
-import { storeKnowledgeItems, countKnowledge, listKnowledge, type KnowledgeDraft } from "../../modules/knowledge/knowledge.service.js";
+import type { KnowledgeSourceType } from "@prisma/client";
+import { storeKnowledgeItems, countKnowledge, listKnowledge, previewDrafts, type KnowledgeDraft } from "../../modules/knowledge/knowledge.service.js";
 import { extractKnowledgeFromPage, NotEnoughContentError } from "../../modules/knowledge/extract.service.js";
 import { fetchPage, PageFetchError } from "../../modules/knowledge/webPage.service.js";
 import { sendApprovalToTelegram } from "../notify.js";
@@ -9,12 +10,13 @@ import { commandTrigger } from "./trigger.js";
 import { logger } from "../../lib/logger.js";
 import { BudgetExceededError } from "../../ai/budget.js";
 
-interface KnowledgeImportPayload extends ApprovalPayload {
+export interface KnowledgeImportPayload extends ApprovalPayload {
   drafts: KnowledgeDraft[];
-  sourceUrl: string;
+  /** Defaults to WEBSITE for cards raised before this field existed. */
+  sourceType?: KnowledgeSourceType;
+  sourceUrl?: string;
+  sourceDetail?: string;
 }
-
-const MAX_PREVIEW_ITEMS = 12;
 
 export function registerLearnCommand(bot: Telegraf) {
   // What happens once Asher approves an import: the drafts become stored
@@ -23,7 +25,11 @@ export function registerLearnCommand(bot: Telegraf) {
     const payload = approval.payload as unknown as KnowledgeImportPayload;
     const stored = await storeKnowledgeItems(
       payload.drafts,
-      { sourceType: "WEBSITE", sourceUrl: payload.sourceUrl },
+      {
+        sourceType: payload.sourceType ?? "WEBSITE",
+        sourceUrl: payload.sourceUrl,
+        sourceDetail: payload.sourceDetail,
+      },
       "FACT",
     );
     const total = await countKnowledge();
@@ -64,18 +70,13 @@ export function registerLearnCommand(bot: Telegraf) {
       return;
     }
 
-    const preview = drafts
-      .slice(0, MAX_PREVIEW_ITEMS)
-      .map((d, i) => `${i + 1}. [${d.category}] ${d.title}\n   ${d.content}`)
-      .join("\n\n");
-    const overflow = drafts.length > MAX_PREVIEW_ITEMS ? `\n\n…and ${drafts.length - MAX_PREVIEW_ITEMS} more.` : "";
-
     const payload: KnowledgeImportPayload = {
       title: "Knowledge found — check before I save it",
       summary: `From ${sourceUrl}\n\nI found ${drafts.length} fact(s). Read them and confirm they're right — I'll treat approved items as fact from then on.`,
-      fields: { "What I found": `${preview}${overflow}` },
+      fields: { "What I found": previewDrafts(drafts) },
       actions: ["APPROVE", "REJECT"],
       drafts,
+      sourceType: "WEBSITE",
       sourceUrl,
     };
 

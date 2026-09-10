@@ -8,6 +8,16 @@ export interface KnowledgeDraft {
   content: string;
 }
 
+/** Renders drafts for an approval card. Shared so every import path previews identically. */
+export function previewDrafts(drafts: KnowledgeDraft[], maxItems = 12): string {
+  const shown = drafts
+    .slice(0, maxItems)
+    .map((d, i) => `${i + 1}. [${d.category}] ${d.title}\n   ${d.content}`)
+    .join("\n\n");
+  const overflow = drafts.length > maxItems ? `\n\n…and ${drafts.length - maxItems} more.` : "";
+  return `${shown}${overflow}`;
+}
+
 export async function storeKnowledgeItems(
   drafts: KnowledgeDraft[],
   source: { sourceType: KnowledgeSourceType; sourceUrl?: string; sourceDetail?: string },

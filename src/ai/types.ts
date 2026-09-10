@@ -4,10 +4,25 @@
  */
 export type TaskType = "STRATEGY" | "CAPTION" | "CLASSIFY" | "CHAT" | "VISION" | "TRANSCRIBE";
 
+/**
+ * A file sent alongside a prompt for the model to read. Described
+ * provider-neutrally so nothing outside the provider knows how Claude wants
+ * image and document blocks shaped.
+ */
+export interface AiAttachment {
+  kind: "image" | "pdf";
+  /** e.g. "image/jpeg", "image/png", "application/pdf". */
+  mediaType: string;
+  data: Buffer;
+  filename?: string;
+}
+
 export interface GenerateOptions {
   system?: string;
   maxTokens?: number;
   temperature?: number;
+  /** Images or PDFs for the model to analyse, rendered ahead of the prompt text. */
+  attachments?: AiAttachment[];
 }
 
 export interface GenerateResult {

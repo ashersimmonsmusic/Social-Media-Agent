@@ -110,6 +110,19 @@ export async function tagAsset(id: string, tags: string[]) {
   return asset;
 }
 
+/** Saves an AI-written description onto an asset so searchAssets can find it later. */
+export async function describeAsset(id: string, description: string) {
+  const asset = await prisma.asset.update({ where: { id }, data: { description, status: "PROCESSED" } });
+  await recordAudit({
+    action: "asset.described",
+    entityType: "Asset",
+    entityId: id,
+    actorType: "AI",
+    details: { description },
+  });
+  return asset;
+}
+
 export async function updateAssetStatus(id: string, status: AssetStatus) {
   const asset = await prisma.asset.update({ where: { id }, data: { status } });
   await recordAudit({ action: "asset.status_changed", entityType: "Asset", entityId: id, actorType: "SYSTEM", details: { status } });
