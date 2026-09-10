@@ -9,11 +9,30 @@ import type { AIProvider, GenerateOptions, GenerateResult, TaskType } from "./ty
 // in brief §49. Update as pricing changes; Phase 2 can source this from a
 // config file if it needs to be more precise.
 const PRICING_PER_MILLION_TOKENS: Record<string, { input: number; output: number }> = {
+  "claude-fable-5-1": { input: 10, output: 50 },
+  "claude-fable-5": { input: 10, output: 50 },
   "claude-opus-5": { input: 5, output: 25 },
+  "claude-opus-4-8": { input: 5, output: 25 },
   "claude-sonnet-5": { input: 2, output: 10 },
+  "claude-sonnet-4-6": { input: 3, output: 15 },
   "claude-haiku-4-5": { input: 1, output: 5 },
 };
+/** Opus-tier rates, so an unrecognised model over-reports rather than under-reports. */
 const DEFAULT_PRICING = { input: 5, output: 25 };
+
+/**
+ * Model IDs come in both alias (`claude-haiku-4-5`) and dated
+ * (`claude-haiku-4-5-20251001`) form and either can be set as the env var, so
+ * the date suffix is stripped before the price lookup — otherwise a dated ID
+ * misses its entry and silently gets billed at the Opus-tier default.
+ */
+export function priceFor(model: string): { input: number; output: number } {
+  return (
+    PRICING_PER_MILLION_TOKENS[model] ??
+    PRICING_PER_MILLION_TOKENS[model.replace(/-\d{8}$/, "")] ??
+    DEFAULT_PRICING
+  );
+}
 
 // Standing instruction applied to every generation so the agent never
 // fabricates biography, achievements, relationships, or credits that
@@ -59,7 +78,7 @@ export class AIService {
 
 /** Records what a call cost. Every path that reaches the provider goes through here. */
 export async function recordUsage(taskType: TaskType, result: GenerateResult) {
-  const pricing = PRICING_PER_MILLION_TOKENS[result.model] ?? DEFAULT_PRICING;
+  const pricing = priceFor(result.model);
   const estimatedCostUsd =
     (result.promptTokens / 1_000_000) * pricing.input + (result.completionTokens / 1_000_000) * pricing.output;
 
