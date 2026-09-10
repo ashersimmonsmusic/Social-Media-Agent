@@ -5,6 +5,28 @@ const boolFromString = z
   .optional()
   .transform((v) => v === "true" || v === "1");
 
+/**
+ * Railway's variable editor has separate name and value boxes, but pasting a
+ * whole `AI_MODEL_STRATEGY=claude-opus-5` line into the value box is an easy
+ * slip — and it reaches the API as a model id with the variable name still
+ * attached, which 404s with a confusing "model not found". Strip a
+ * self-referential `KEY=` prefix and any wrapping quotes so the paste works.
+ */
+export function sanitizeModelId(raw: string, fallback: string): string {
+  const cleaned = raw
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^[A-Za-z_][A-Za-z0-9_]*=/, "")
+    .trim();
+  return cleaned || fallback;
+}
+
+const modelId = (fallback: string) =>
+  z
+    .string()
+    .default(fallback)
+    .transform((raw) => sanitizeModelId(raw, fallback));
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -18,8 +40,8 @@ const envSchema = z.object({
   PUBLIC_BASE_URL: z.string().optional(),
 
   ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
-  AI_MODEL_STRATEGY: z.string().default("claude-opus-5"),
-  AI_MODEL_FAST: z.string().default("claude-haiku-4-5"),
+  AI_MODEL_STRATEGY: modelId("claude-opus-5"),
+  AI_MODEL_FAST: modelId("claude-haiku-4-5"),
 
   ADMIN_API_KEY: z.string().min(1, "ADMIN_API_KEY is required"),
 
