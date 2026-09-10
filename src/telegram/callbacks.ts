@@ -1,5 +1,6 @@
 import type { Telegraf } from "telegraf";
 import { getApproval, resolveApproval, updateApprovalPayload, type ApprovalPayload } from "../modules/approvals/approval.service.js";
+import { runApprovedAction } from "../modules/approvals/actions.js";
 import { checkBrandCompliance } from "../modules/brand/brand.service.js";
 import { renderApprovalMessage, renderResolvedMessage } from "./approvals.render.js";
 import { updateApprovalMessage } from "./notify.js";
@@ -42,6 +43,18 @@ export function registerApprovalCallbacks(bot: Telegraf) {
       const resolved = await resolveApproval(approvalId, status, chatId);
       await ctx.answerCbQuery(status);
       await ctx.editMessageText(renderResolvedMessage(resolved));
+
+      if (status === "APPROVED") {
+        const outcome = await runApprovedAction(resolved);
+        if (!outcome.ok) {
+          // Never let a failed action look like it succeeded (brief §45).
+          await ctx.reply(
+            `⚠️ I recorded your approval, but the action itself failed, so nothing was carried out:\n${outcome.message}`,
+          );
+        } else if (outcome.message) {
+          await ctx.reply(outcome.message);
+        }
+      }
       return;
     }
 

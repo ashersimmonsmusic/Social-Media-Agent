@@ -15,4 +15,6 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "pending", description: "Anything awaiting your approval" },
   { command: "brand", description: "Your Brand Bible summary" },
   { command: "caption", description: "Draft caption options for review" },
+  { command: "learn", description: "Learn facts about you from a web page" },
+  { command: "knowledge", description: "What I currently know about you" },
 ];

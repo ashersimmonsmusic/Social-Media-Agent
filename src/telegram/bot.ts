@@ -7,6 +7,7 @@ import { registerWhatsImportantCommand } from "./commands/whatsImportant.js";
 import { registerLibraryCommand } from "./commands/library.js";
 import { registerBrandCommand } from "./commands/brand.js";
 import { registerCaptionCommand } from "./commands/caption.js";
+import { registerLearnCommand } from "./commands/learn.js";
 import { registerUploadHandlers } from "./handlers/uploads.js";
 import { registerTextHandler } from "./handlers/text.js";
 import { registerApprovalCallbacks } from "./callbacks.js";
@@ -36,6 +37,7 @@ export function createBot(): Telegraf {
   registerLibraryCommand(bot);
   registerBrandCommand(bot);
   registerCaptionCommand(bot);
+  registerLearnCommand(bot);
   registerApprovalCallbacks(bot);
 
   // Upload/text handlers must be registered last so command handlers match first.

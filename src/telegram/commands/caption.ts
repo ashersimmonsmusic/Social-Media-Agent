@@ -4,12 +4,29 @@ import { checkBrandCompliance } from "../../modules/brand/brand.service.js";
 import { createApproval, type ApprovalPayload } from "../../modules/approvals/approval.service.js";
 import { sendApprovalToTelegram } from "../notify.js";
 import { commandTrigger } from "./trigger.js";
+import { listKnowledge } from "../../modules/knowledge/knowledge.service.js";
 
 const CAPTION_SYSTEM_PROMPT =
   "Draft social media caption options for independent artist Asher Simmons. " +
   "Produce exactly 3 distinct options, labelled Option 1/2/3, each 1-3 sentences, " +
   "in different registers (e.g. emotional/storytelling, short and punchy, conversational). " +
   "Do not invent any biographical detail, achievement, or event beyond what's given below.";
+
+const MAX_KNOWLEDGE_ITEMS = 25;
+
+/** Grounds the draft in confirmed knowledge so captions use real detail rather than invented colour. */
+async function buildCaptionPrompt(idea: string): Promise<string> {
+  const known = await listKnowledge({ limit: MAX_KNOWLEDGE_ITEMS });
+  if (known.length === 0) return `Post is about: ${idea}`;
+
+  const facts = known.map((item) => `- [${item.category}] ${item.title}: ${item.content}`).join("\n");
+  return [
+    "Confirmed facts about Asher (the ONLY background you may draw on):",
+    facts,
+    "",
+    `Post is about: ${idea}`,
+  ].join("\n");
+}
 
 /**
  * The first real end-to-end Level 1→2 AI feature: draft caption options from
@@ -26,7 +43,7 @@ export function registerCaptionCommand(bot: Telegraf) {
 
     await ctx.reply("Drafting caption options…");
 
-    const prompt = `Post is about: ${idea}`;
+    const prompt = await buildCaptionPrompt(idea);
     const result = await aiService.generate("CAPTION", prompt, { system: CAPTION_SYSTEM_PROMPT });
     const compliance = await checkBrandCompliance(result.text);
 

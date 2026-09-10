@@ -11,7 +11,9 @@ export function registerStartCommand(bot: Telegraf) {
         "/whatsimportant — top priorities right now\n" +
         "/library — recent content library items\n" +
         "/brand — view your Brand Bible summary\n" +
-        "/caption <idea> — draft caption options for review",
+        "/caption <idea> — draft caption options for review\n" +
+        "/learn <url> — read a web page and learn facts about you\n" +
+        "/knowledge — what I currently know about you",
     );
   });
 }

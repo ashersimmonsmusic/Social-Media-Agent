@@ -146,12 +146,61 @@ model ContentIdea {
   @@index([status, pillar])
 }
 
+// ── Knowledge base (brief §40) ────────────────────────────────────────────
+
+enum KnowledgeCategory {
+  ARTIST_BIO
+  MUSIC_CATALOGUE
+  BRAND
+  PERSONAL_STORY
+  ACHIEVEMENTS
+  PRESS
+  LIVE_HISTORY
+  COLLABORATORS
+  BUSINESS
+  LINKS
+  IMPORTANT_FACTS
+}
+
+/// How much weight the agent may put on an item. Anything the agent has not
+/// had confirmed by Asher stays UNCONFIRMED so it is never asserted as fact.
+enum KnowledgeConfidence {
+  FACT
+  PREFERENCE
+  OPINION
+  UNCONFIRMED
+}
+
+enum KnowledgeSourceType {
+  WEBSITE
+  ASHER
+  DOCUMENT
+  MANUAL
+}
+
+model KnowledgeItem {
+  id           String              @id @default(cuid())
+  category     KnowledgeCategory
+  title        String
+  content      String
+  confidence   KnowledgeConfidence @default(UNCONFIRMED)
+  sourceType   KnowledgeSourceType
+  sourceUrl    String?
+  sourceDetail String?
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([category, isActive])
+}
+
 // ── Approvals ─────────────────────────────────────────────────────────────
 
 enum ApprovalType {
   GENERIC
   SOCIAL_POST
   OUTREACH
+  KNOWLEDGE_IMPORT
 }
 
 enum ApprovalLevel {
