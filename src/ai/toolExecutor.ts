@@ -4,6 +4,8 @@ import { listKnowledge, searchKnowledge } from "../modules/knowledge/knowledge.s
 import { getOrCreateBrandProfile, listActiveBrandRules } from "../modules/brand/brand.service.js";
 import { listPendingApprovals, createApproval, type ApprovalPayload } from "../modules/approvals/approval.service.js";
 import { sendApprovalToTelegram } from "../telegram/notify.js";
+import { validateForPlatform } from "../modules/social/social.service.js";
+import type { SocialPostPayload } from "../telegram/commands/social.js";
 import { logger } from "../lib/logger.js";
 
 /** Runs the tools declared in agentTools.ts. Kept separate so the tool
@@ -88,6 +90,37 @@ export function buildToolExecutor(telegram: Telegram) {
         const approval = await createApproval({ level: "LEVEL_2", payload });
         await sendApprovalToTelegram(telegram, approval);
         return `Sent to Asher as approval ${approval.id}. He must press a button — nothing has been published or sent.`;
+      }
+
+      case "propose_social_post": {
+        const caption = String(input.caption ?? "").trim();
+        const mediaUrl = typeof input.mediaUrl === "string" ? input.mediaUrl.trim() : undefined;
+        const rationale = String(input.rationale ?? "").trim();
+        if (!caption) return "No caption provided — nothing to propose.";
+
+        // Check the platform's own rules first: raising a card that would fail
+        // on approval is worse than saying now what's wrong with it.
+        const validation = await validateForPlatform("INSTAGRAM", { caption, mediaUrl });
+        if (!validation.ok) {
+          return (
+            `Not proposed — Instagram would reject this: ${validation.problems.join(" ")} ` +
+            `Tell Asher what's needed instead of raising a card that can't go out.`
+          );
+        }
+
+        const payload: SocialPostPayload = {
+          title: "Instagram post — approve to publish",
+          summary: rationale || "Drafted for your Instagram.",
+          fields: { Caption: caption, ...(mediaUrl ? { Image: mediaUrl } : {}) },
+          actions: ["APPROVE", "EDIT", "REJECT"],
+          editableField: "Caption",
+          platform: "INSTAGRAM",
+          caption,
+          mediaUrl,
+        };
+        const approval = await createApproval({ type: "SOCIAL_POST", level: "LEVEL_2", payload });
+        await sendApprovalToTelegram(telegram, approval);
+        return `Sent as an Instagram post for approval (${approval.id}). Nothing is published until Asher presses Approve.`;
       }
 
       case "propose_behavior_rule": {

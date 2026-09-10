@@ -13,6 +13,7 @@ import { registerResetCommand } from "./commands/reset.js";
 import { registerRulesCommand } from "./commands/rules.js";
 import { registerDiagCommand } from "./commands/diag.js";
 import { registerSpendCommand } from "./commands/spend.js";
+import { registerSocialCommands } from "./commands/social.js";
 import { registerUploadHandlers } from "./handlers/uploads.js";
 import { registerTextHandler } from "./handlers/text.js";
 import { registerApprovalCallbacks } from "./callbacks.js";
@@ -47,6 +48,7 @@ export function createBot(): Telegraf {
   registerRulesCommand(bot);
   registerDiagCommand(bot);
   registerSpendCommand(bot);
+  registerSocialCommands(bot);
   registerApprovalCallbacks(bot);
 
   // Upload/text handlers must be registered last so command handlers match first.

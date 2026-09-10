@@ -45,6 +45,11 @@ const envSchema = z.object({
 
   ADMIN_API_KEY: z.string().min(1, "ADMIN_API_KEY is required"),
 
+  // Social publishing. Optional so the app still boots before any account is
+  // connected; connecting one without SOCIAL_TOKEN_KEY fails with a clear error.
+  SOCIAL_TOKEN_KEY: z.string().optional(),
+  META_GRAPH_API_VERSION: z.string().default("v21.0"),
+
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_PATH: z.string().default("./uploads"),
 

@@ -21,4 +21,7 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "rules", description: "Your standing instructions for how I behave" },
   { command: "diag", description: "Check which AI models your key can reach" },
   { command: "spend", description: "What the AI has cost this month" },
+  { command: "connect", description: "Link your Instagram account for posting" },
+  { command: "accounts", description: "Which accounts are linked, and recent posts" },
+  { command: "disconnect", description: "Unlink Instagram so nothing can post" },
 ];

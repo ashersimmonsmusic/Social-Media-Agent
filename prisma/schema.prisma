@@ -119,6 +119,7 @@ model Asset {
   usageRights     String?
   metadata        Json          @default("{}")
   contentIdeas    ContentIdea[]
+  socialPosts     SocialPost[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -292,4 +293,60 @@ model AIUsageLog {
   createdAt         DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ── Social accounts & posting (ARCHITECTURE.md §6) ────────────────────────
+
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+  X
+  TIKTOK
+  YOUTUBE
+}
+
+model SocialAccount {
+  id                String         @id @default(cuid())
+  platform          SocialPlatform
+  /// Instagram Business account id, or Facebook Page id — the platform's own identifier.
+  platformAccountId String
+  username          String?
+  /// AES-256-GCM ciphertext. Never store or log a token in plaintext.
+  accessToken       String
+  tokenExpiresAt    DateTime?
+  isActive          Boolean        @default(true)
+  posts             SocialPost[]
+  connectedAt       DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([platform, platformAccountId])
+  @@index([platform, isActive])
+}
+
+enum SocialPostStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+model SocialPost {
+  id              String           @id @default(cuid())
+  socialAccountId String
+  socialAccount   SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  caption         String
+  assetId         String?
+  asset           Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  status          SocialPostStatus @default(DRAFT)
+  /// The platform's id for the published post, or a dry-run marker.
+  platformPostId  String?
+  publishedAt     DateTime?
+  failureReason   String?
+  /// True when this was recorded under DRY_RUN and never actually left the server.
+  dryRun          Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status, createdAt])
 }

@@ -78,6 +78,25 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "propose_social_post",
+    description:
+      "Put a social post in front of Asher as an approval card. This is the ONLY route anything takes to Instagram, " +
+      "and it posts only after he presses Approve — calling this does not publish. Instagram requires an image, so " +
+      "include mediaUrl with a public https image URL; without one the post cannot go out and you should say so.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        caption: { type: "string", description: "The full caption exactly as it should appear, hashtags included." },
+        mediaUrl: {
+          type: "string",
+          description: "Public https URL of the image to post. Instagram fetches it, so it must be reachable publicly.",
+        },
+        rationale: { type: "string", description: "One line on why this post, for Asher to weigh up." },
+      },
+      required: ["caption"],
+    },
+  },
+  {
     name: "propose_behavior_rule",
     description:
       "Propose a standing instruction for Asher to approve — use ONLY when he explicitly tells you to change how you " +

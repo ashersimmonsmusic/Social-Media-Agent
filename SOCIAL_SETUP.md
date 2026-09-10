@@ -1,0 +1,143 @@
+# Connecting Instagram
+
+Posting access can't be granted from code — you have to create a Meta developer app
+and authorize it against your own account. This is that walkthrough.
+
+Budget real time for it. The app itself takes an hour; **App Review takes days**, and
+Meta rejects vague submissions. Nothing here is optional — Instagram has no
+posting path that skips review.
+
+---
+
+## What you need before starting
+
+1. **An Instagram Business or Creator account.** A personal account cannot post via
+   the API at all. Convert in the Instagram app: Settings → Account type and tools →
+   Switch to professional account.
+2. **A Facebook Page**, linked to that Instagram account. Instagram's API works
+   through the Page. Link it in Instagram: Settings → Business tools and controls →
+   Connected accounts.
+3. **A Meta developer account** at <https://developers.facebook.com>.
+
+If your Instagram isn't a Business/Creator account linked to a Page, nothing below
+will work — start there.
+
+---
+
+## Step 1 — Create the app
+
+1. <https://developers.facebook.com/apps> → **Create app**
+2. Use case: **Other** → type: **Business**
+3. Add the **Instagram** product to the app.
+
+## Step 2 — Get your Instagram Business account ID
+
+In the Graph API Explorer (<https://developers.facebook.com/tools/explorer>):
+
+1. Select your app, then generate a user token with these permissions:
+   `pages_show_list`, `instagram_basic`, `instagram_content_publish`,
+   `pages_read_engagement`
+2. Query `me/accounts` to find your Page, and copy its `id`.
+3. Query `<page-id>?fields=instagram_business_account`.
+
+The `instagram_business_account.id` it returns is what `/connect` wants — a long
+number starting `1784…`. **Not** your @handle.
+
+## Step 3 — Get a long-lived token
+
+Tokens from the Explorer expire in about an hour, which is useless for a bot.
+
+1. Exchange your short-lived user token for a long-lived one (~60 days) using the
+   `fb_exchange_token` grant.
+2. Then fetch the **Page access token** from `me/accounts` using that long-lived
+   token. A Page token obtained this way does not expire while the app and Page
+   remain in good standing.
+
+Use the Page access token with `/connect`. Meta's own
+["Access Tokens"](https://developers.facebook.com/docs/facebook-login/guides/access-tokens)
+guide has the exact request shapes, which change more often than this file will.
+
+## Step 4 — App Review
+
+`instagram_content_publish` requires App Review before it works on a live account.
+Submit with a screencast showing your own flow: a draft appearing in Telegram, you
+pressing Approve, the post appearing on your Instagram. Reviewers reject submissions
+that don't show the actual publishing path.
+
+Until review passes, you can only publish to accounts with a role on the app
+(yours, as the developer). That's enough to test.
+
+---
+
+## Step 5 — Configure Railway
+
+Add two variables:
+
+```
+SOCIAL_TOKEN_KEY=<output of: openssl rand -hex 32>
+META_GRAPH_API_VERSION=v21.0
+```
+
+`SOCIAL_TOKEN_KEY` encrypts stored tokens, so a database dump doesn't hand over
+posting access. If you change it later, stored tokens become undecryptable and
+you'll reconnect the account.
+
+Check the current Graph API version in the Meta console and set
+`META_GRAPH_API_VERSION` to match — versions are deprecated on a schedule, and a
+retired one fails with a confusing error.
+
+Leave `DRY_RUN=true` for now.
+
+---
+
+## Step 6 — Connect
+
+In Telegram:
+
+```
+/connect 17841400000000000 EAAB...your-page-token accountname
+```
+
+Then **delete that message.** It contains a token that can post as you. Telegram
+keeps message history, and the bot cannot delete your messages for you.
+
+Check it worked with `/accounts`.
+
+---
+
+## Step 7 — Test before going live
+
+With `DRY_RUN=true`, ask the bot to draft a post. Approve it. You'll get a
+`DRY RUN — nothing was actually posted` confirmation, and the whole path is
+exercised without touching Instagram. `/accounts` lists it as a dry run.
+
+When you're satisfied, set `DRY_RUN=false` in Railway. **From that point an
+approved post is a real, public post.**
+
+---
+
+## How posting actually works
+
+- The bot can *propose* a post. It cannot publish one. `propose_social_post` only
+  raises an approval card.
+- Publishing happens in exactly one place, reached only by the approval handler
+  when you press Approve.
+- Instagram requires an image on every post — there is no text-only post. The
+  caption is validated (2200 characters, 30 hashtags) before a card is raised, so
+  you don't approve something that then fails.
+- Instagram fetches the image from a **public HTTPS URL**; it doesn't accept
+  uploaded bytes. Files in your library live on the Railway volume and aren't
+  publicly reachable, so for now pass an image URL that's already public — one from
+  your website, for instance. Posting straight from your library needs public media
+  serving, which isn't built yet.
+
+## If something fails
+
+`/accounts` shows recent posts with their status and the failure reason. Common ones:
+
+- *"Media URL unreachable"* — Instagram couldn't fetch your image. It must be
+  public, HTTPS, and not behind Cloudflare bot protection.
+- *"no text-only post"* — you didn't give an image URL.
+- *Permission errors* — App Review hasn't passed, or the token lacks
+  `instagram_content_publish`.
+- *Token expired* — reconnect with a fresh Page token via `/connect`.
