@@ -1,7 +1,8 @@
 import type { Telegraf } from "telegraf";
+import { commandTrigger } from "./trigger.js";
 
 export function registerStartCommand(bot: Telegraf) {
-  bot.command("start", async (ctx) => {
+  bot.command(commandTrigger("start"), async (ctx) => {
     await ctx.reply(
       "Asher's AI Artist Agent is online.\n\n" +
         "Send me a photo, video, audio file, document, or a piece of text/a quote and " +

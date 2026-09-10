@@ -1,9 +1,10 @@
 import type { Telegraf } from "telegraf";
 import { listAssets } from "../../modules/assets/asset.service.js";
 import { listPendingApprovals } from "../../modules/approvals/approval.service.js";
+import { commandTrigger } from "./trigger.js";
 
 export function registerLibraryCommand(bot: Telegraf) {
-  bot.command("library", async (ctx) => {
+  bot.command(commandTrigger("library"), async (ctx) => {
     const assets = await listAssets({ limit: 10 });
     if (assets.length === 0) {
       await ctx.reply("Your content library is empty. Send me a photo, video, audio file, or document to get started.");
@@ -16,7 +17,7 @@ export function registerLibraryCommand(bot: Telegraf) {
     await ctx.reply(lines.join("\n"));
   });
 
-  bot.command("pending", async (ctx) => {
+  bot.command(commandTrigger("pending"), async (ctx) => {
     const pending = await listPendingApprovals(10);
     if (pending.length === 0) {
       await ctx.reply("Nothing awaiting your approval right now.");

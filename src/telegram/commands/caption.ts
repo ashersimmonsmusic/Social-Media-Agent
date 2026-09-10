@@ -3,6 +3,7 @@ import { aiService } from "../../ai/AIService.js";
 import { checkBrandCompliance } from "../../modules/brand/brand.service.js";
 import { createApproval, type ApprovalPayload } from "../../modules/approvals/approval.service.js";
 import { sendApprovalToTelegram } from "../notify.js";
+import { commandTrigger } from "./trigger.js";
 
 const CAPTION_SYSTEM_PROMPT =
   "Draft social media caption options for independent artist Asher Simmons. " +
@@ -16,8 +17,8 @@ const CAPTION_SYSTEM_PROMPT =
  * result up for approval on Telegram rather than posting anything.
  */
 export function registerCaptionCommand(bot: Telegraf) {
-  bot.command("caption", async (ctx) => {
-    const idea = ctx.message.text.replace(/^\/caption(@\w+)?\s*/, "").trim();
+  bot.command(commandTrigger("caption"), async (ctx) => {
+    const idea = ctx.payload.trim();
     if (!idea) {
       await ctx.reply("Usage: /caption <what this post is about>\nExample: /caption new single Brighter Days is out today");
       return;

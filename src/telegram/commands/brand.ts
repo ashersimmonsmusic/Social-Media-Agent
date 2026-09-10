@@ -1,8 +1,9 @@
 import type { Telegraf } from "telegraf";
 import { getOrCreateBrandProfile, listActiveBrandRules, type BrandVoice } from "../../modules/brand/brand.service.js";
+import { commandTrigger } from "./trigger.js";
 
 export function registerBrandCommand(bot: Telegraf) {
-  bot.command("brand", async (ctx) => {
+  bot.command(commandTrigger("brand"), async (ctx) => {
     const profile = await getOrCreateBrandProfile();
     const voice = (profile.voice as BrandVoice) ?? {};
     const rules = await listActiveBrandRules();

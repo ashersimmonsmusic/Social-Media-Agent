@@ -1,6 +1,7 @@
 import type { Telegraf } from "telegraf";
 import { listPendingApprovals } from "../../modules/approvals/approval.service.js";
 import { listUnusedAssets } from "../../modules/assets/asset.service.js";
+import { commandTrigger } from "./trigger.js";
 
 /**
  * Brief §53/§62's "What's important?" command. A real priority engine
@@ -9,7 +10,7 @@ import { listUnusedAssets } from "../../modules/assets/asset.service.js";
  * pending approvals and unused content — rather than inventing priorities.
  */
 export function registerWhatsImportantCommand(bot: Telegraf) {
-  bot.command(["whatsimportant", "important"], async (ctx) => {
+  bot.command(commandTrigger("whatsimportant", "important"), async (ctx) => {
     const [pending, unused] = await Promise.all([listPendingApprovals(5), listUnusedAssets(5)]);
 
     const lines: string[] = ["WHAT'S IMPORTANT RIGHT NOW"];

@@ -4,6 +4,7 @@ import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { router } from "./http/router.js";
 import { createBot } from "./telegram/bot.js";
+import { COMMANDS } from "./telegram/commands/trigger.js";
 
 async function main() {
   const app = express();
@@ -11,6 +12,11 @@ async function main() {
   app.use(router);
 
   const bot = createBot();
+
+  // Publishes the command list to Telegram's menu so commands can be tapped
+  // rather than typed — a typed command that gets autocapitalised by a phone
+  // keyboard won't match its handler.
+  await bot.telegram.setMyCommands(COMMANDS);
 
   if (env.TELEGRAM_USE_WEBHOOK) {
     if (!env.PUBLIC_BASE_URL) {

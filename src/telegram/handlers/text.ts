@@ -5,6 +5,7 @@ import { checkBrandCompliance } from "../../modules/brand/brand.service.js";
 import { getApproval, updateApprovalPayload, type ApprovalPayload } from "../../modules/approvals/approval.service.js";
 import { renderApprovalMessage } from "../approvals.render.js";
 import { takeAwaitingEdit } from "../editState.js";
+import { COMMANDS } from "../commands/trigger.js";
 
 /**
  * Handles plain text messages that are NOT commands. Registered last so
@@ -39,6 +40,15 @@ export function registerTextHandler(bot: Telegraf) {
           return;
         }
       }
+    }
+
+    // Reaching here with a slash-prefixed message means no command handler
+    // matched it. Filing it as content would bury a typo in the library with
+    // no feedback, so say so instead.
+    if (text.startsWith("/")) {
+      const known = COMMANDS.map((c) => `/${c.command}`).join(", ");
+      await ctx.reply(`I don't recognise that command. Try one of: ${known}`);
+      return;
     }
 
     const asset = await ingestText({ text, source: "telegram" });
