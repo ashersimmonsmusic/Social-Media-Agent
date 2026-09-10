@@ -1,0 +1,241 @@
+// Phase 1 schema — see ARCHITECTURE.md §4 for rationale and for entities
+// deliberately deferred to later phases (Campaign, MusicRelease, Contact,
+// Outreach, Opportunity, SocialAccount/SocialPost, PressRelease, EPK, etc.)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users ────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ARTIST
+  ADMIN
+}
+
+model User {
+  id              String   @id @default(cuid())
+  telegramChatId  String?  @unique
+  email           String?  @unique
+  name            String
+  role            UserRole @default(ARTIST)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ── Brand Bible ──────────────────────────────────────────────────────────
+
+model BrandProfile {
+  id                 String      @id @default(cuid())
+  name               String      @default("Asher Simmons")
+  colors             Json        @default("{}")
+  visualMotifs       Json        @default("{}")
+  voice              Json        @default("{}")
+  identityBoundaries Json        @default("{}")
+  importedFrom       String?
+  rules              BrandRule[]
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+enum BrandRuleCategory {
+  VISUAL
+  VOICE
+  SAFETY
+}
+
+enum BrandRuleKind {
+  FACT
+  PREFERENCE
+  OPINION
+  ONE_TIME_EDIT
+  PERMANENT_PREFERENCE
+  UNCONFIRMED
+}
+
+enum BrandRuleSource {
+  BRAND_BOOK_IMPORT
+  ASHER_CORRECTION
+  MANUAL
+}
+
+model BrandRule {
+  id             String            @id @default(cuid())
+  brandProfileId String
+  brandProfile   BrandProfile      @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+  category       BrandRuleCategory
+  kind           BrandRuleKind
+  description    String
+  source         BrandRuleSource
+  isActive       Boolean           @default(true)
+  relatedRuleId  String?
+  relatedRule    BrandRule?        @relation("RuleHistory", fields: [relatedRuleId], references: [id])
+  history        BrandRule[]       @relation("RuleHistory")
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([brandProfileId, category, isActive])
+}
+
+// ── Content Library ──────────────────────────────────────────────────────
+
+enum AssetType {
+  PHOTO
+  VIDEO
+  AUDIO
+  MUSIC
+  DOCUMENT
+  TEXT
+  URL
+  OTHER
+}
+
+enum AssetStatus {
+  UNPROCESSED
+  PROCESSED
+  PUBLISHED
+  ARCHIVED
+}
+
+model Asset {
+  id              String        @id @default(cuid())
+  filename        String
+  storageKey      String
+  mimeType        String?
+  assetType       AssetType
+  description     String?
+  tags            String[]      @default([])
+  status          AssetStatus   @default(UNPROCESSED)
+  source          String?
+  sourceUrl       String?
+  rawTextContent  String?
+  usageRights     String?
+  metadata        Json          @default("{}")
+  contentIdeas    ContentIdea[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([assetType, status])
+}
+
+// ── Content ideation backlog ─────────────────────────────────────────────
+
+enum ContentIdeaStatus {
+  NEW
+  DRAFTED
+  USED
+  DISCARDED
+}
+
+model ContentIdea {
+  id            String            @id @default(cuid())
+  title         String
+  description   String?
+  pillar        String?
+  status        ContentIdeaStatus @default(NEW)
+  sourceAssetId String?
+  sourceAsset   Asset?            @relation(fields: [sourceAssetId], references: [id], onDelete: SetNull)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, pillar])
+}
+
+// ── Approvals ─────────────────────────────────────────────────────────────
+
+enum ApprovalType {
+  GENERIC
+  SOCIAL_POST
+  OUTREACH
+}
+
+enum ApprovalLevel {
+  LEVEL_1
+  LEVEL_2
+  LEVEL_3
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EDITED
+  EXPIRED
+  CANCELLED
+}
+
+model Approval {
+  id                String         @id @default(cuid())
+  type              ApprovalType   @default(GENERIC)
+  level             ApprovalLevel  @default(LEVEL_2)
+  status            ApprovalStatus @default(PENDING)
+  payload           Json
+  telegramChatId    String?
+  telegramMessageId String?
+  requestedAt       DateTime       @default(now())
+  resolvedAt        DateTime?
+  resolvedBy        String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([status, type])
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────
+
+enum AuditActorType {
+  AI
+  ASHER
+  SYSTEM
+}
+
+model AuditLog {
+  id         String         @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String?
+  actorType  AuditActorType
+  actorId    String?
+  details    Json           @default("{}")
+  createdAt  DateTime       @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ── AI conversation memory (short-term, per Telegram chat) ───────────────
+
+enum AIMessageRole {
+  user
+  assistant
+}
+
+model AIConversation {
+  id             String        @id @default(cuid())
+  telegramChatId String
+  role           AIMessageRole
+  content        String
+  createdAt      DateTime      @default(now())
+
+  @@index([telegramChatId, createdAt])
+}
+
+// ── AI usage / cost tracking ──────────────────────────────────────────────
+
+model AIUsageLog {
+  id                String   @id @default(cuid())
+  provider          String
+  model             String
+  taskType          String
+  promptTokens      Int
+  completionTokens  Int
+  estimatedCostUsd  Float
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+}
