@@ -14,8 +14,13 @@ export interface GenerateResult {
   text: string;
   provider: string;
   model: string;
+  /** Uncached input tokens only — cache reads/writes are billed at different rates. */
   promptTokens: number;
   completionTokens: number;
+  /** Input tokens served from the prompt cache, billed at 0.1x. */
+  cacheReadTokens: number;
+  /** Input tokens written into the prompt cache, billed at 1.25x. */
+  cacheWriteTokens: number;
 }
 
 /** A tool the agent may call during a conversation, described provider-neutrally. */

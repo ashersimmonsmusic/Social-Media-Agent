@@ -7,6 +7,7 @@ import { renderApprovalMessage } from "../approvals.render.js";
 import { takeAwaitingEdit } from "../editState.js";
 import { COMMANDS } from "../commands/trigger.js";
 import { converseWithAsher } from "../../ai/ConversationService.js";
+import { BudgetExceededError } from "../../ai/budget.js";
 import { logger } from "../../lib/logger.js";
 
 /**
@@ -69,6 +70,10 @@ export function registerTextHandler(bot: Telegraf) {
       const reply = await converseWithAsher({ telegram: ctx.telegram, telegramChatId: chatId, message: text });
       await ctx.reply(reply || "I didn't have anything useful to say to that — try me again?");
     } catch (error) {
+      if (error instanceof BudgetExceededError) {
+        await ctx.reply(error.message);
+        return;
+      }
       const detail = error instanceof Error ? error.message : String(error);
       logger.error("conversation_failed", { error: detail });
       await ctx.reply(`Hit an error — here's the detail so we can fix it:\n\n${detail.slice(0, 400)}`);

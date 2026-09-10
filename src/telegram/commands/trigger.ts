@@ -20,4 +20,5 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "reset", description: "Start a fresh conversation" },
   { command: "rules", description: "Your standing instructions for how I behave" },
   { command: "diag", description: "Check which AI models your key can reach" },
+  { command: "spend", description: "What the AI has cost this month" },
 ];

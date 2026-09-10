@@ -286,6 +286,8 @@ model AIUsageLog {
   taskType          String
   promptTokens      Int
   completionTokens  Int
+  cacheReadTokens   Int      @default(0)
+  cacheWriteTokens  Int      @default(0)
   estimatedCostUsd  Float
   createdAt         DateTime @default(now())
 

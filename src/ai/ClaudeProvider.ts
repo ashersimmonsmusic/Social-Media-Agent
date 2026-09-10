@@ -70,6 +70,8 @@ export class ClaudeProvider implements AIProvider {
       model,
       promptTokens: response.usage.input_tokens,
       completionTokens: response.usage.output_tokens,
+      cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
     };
   }
 
@@ -89,22 +91,33 @@ export class ClaudeProvider implements AIProvider {
       input_schema: tool.inputSchema as Anthropic.Tool.InputSchema,
     }));
 
+    // Tools and system render ahead of the conversation and are identical on
+    // every message, so a single breakpoint on the last system block caches
+    // both — the largest fixed cost in each request.
+    const system: Anthropic.TextBlockParam[] = [
+      { type: "text", text: options.system, cache_control: { type: "ephemeral" } },
+    ];
+
     const toolsCalled: string[] = [];
     let promptTokens = 0;
     let completionTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheWriteTokens = 0;
     const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       const response = await this.createWithOptionalThinking({
         model,
         max_tokens: 16000,
-        system: options.system,
+        system,
         tools,
-        messages,
+        messages: withHistoryCacheBreakpoint(messages),
       });
 
       promptTokens += response.usage.input_tokens;
       completionTokens += response.usage.output_tokens;
+      cacheReadTokens += response.usage.cache_read_input_tokens ?? 0;
+      cacheWriteTokens += response.usage.cache_creation_input_tokens ?? 0;
 
       if (response.stop_reason !== "tool_use") {
         return {
@@ -113,6 +126,8 @@ export class ClaudeProvider implements AIProvider {
           model,
           promptTokens,
           completionTokens,
+          cacheReadTokens,
+          cacheWriteTokens,
           toolsCalled,
         };
       }
@@ -146,9 +161,35 @@ export class ClaudeProvider implements AIProvider {
       model,
       promptTokens,
       completionTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
       toolsCalled,
     };
   }
+}
+
+/**
+ * Marks the end of the conversation so far as a cache breakpoint. Each pass of
+ * the tool loop re-sends every earlier message, so without this the whole
+ * history and every tool result is re-billed at full price on each pass.
+ *
+ * The marker is applied to a copy rather than to `messages` itself: markers
+ * left in place would accumulate across iterations and blow the four
+ * breakpoints an request is allowed.
+ */
+function withHistoryCacheBreakpoint(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  const last = messages[messages.length - 1];
+  if (!last) return messages;
+
+  const blocks: Anthropic.ContentBlockParam[] =
+    typeof last.content === "string" ? [{ type: "text", text: last.content }] : [...last.content];
+  const tail = blocks[blocks.length - 1];
+  if (!tail) return messages;
+
+  blocks[blocks.length - 1] = { ...tail, cache_control: { type: "ephemeral" } } as Anthropic.ContentBlockParam;
+  const copy = [...messages];
+  copy[copy.length - 1] = { ...last, content: blocks };
+  return copy;
 }
 
 function textOf(content: Anthropic.ContentBlock[]): string {

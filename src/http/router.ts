@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { env } from "../config/env.js";
-import { getMonthToDateAiSpend } from "../ai/AIService.js";
+import { getMonthToDateAiSpend } from "../ai/budget.js";
 
 export const router = Router();
 

@@ -7,6 +7,7 @@ import { fetchPage, PageFetchError } from "../../modules/knowledge/webPage.servi
 import { sendApprovalToTelegram } from "../notify.js";
 import { commandTrigger } from "./trigger.js";
 import { logger } from "../../lib/logger.js";
+import { BudgetExceededError } from "../../ai/budget.js";
 
 interface KnowledgeImportPayload extends ApprovalPayload {
   drafts: KnowledgeDraft[];
@@ -47,6 +48,10 @@ export function registerLearnCommand(bot: Telegraf) {
     } catch (error) {
       if (error instanceof PageFetchError || error instanceof NotEnoughContentError) {
         await ctx.reply(`I couldn't learn from that page.\n\n${error.message}`);
+        return;
+      }
+      if (error instanceof BudgetExceededError) {
+        await ctx.reply(error.message);
         return;
       }
       logger.error("learn.failed", { url, error: String(error) });

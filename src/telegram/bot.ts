@@ -2,6 +2,7 @@ import { Telegraf } from "telegraf";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 import { recordAudit } from "../modules/audit/audit.service.js";
+import { BudgetExceededError } from "../ai/budget.js";
 import { registerStartCommand } from "./commands/start.js";
 import { registerWhatsImportantCommand } from "./commands/whatsImportant.js";
 import { registerLibraryCommand } from "./commands/library.js";
@@ -11,6 +12,7 @@ import { registerLearnCommand } from "./commands/learn.js";
 import { registerResetCommand } from "./commands/reset.js";
 import { registerRulesCommand } from "./commands/rules.js";
 import { registerDiagCommand } from "./commands/diag.js";
+import { registerSpendCommand } from "./commands/spend.js";
 import { registerUploadHandlers } from "./handlers/uploads.js";
 import { registerTextHandler } from "./handlers/text.js";
 import { registerApprovalCallbacks } from "./callbacks.js";
@@ -44,14 +46,20 @@ export function createBot(): Telegraf {
   registerResetCommand(bot);
   registerRulesCommand(bot);
   registerDiagCommand(bot);
+  registerSpendCommand(bot);
   registerApprovalCallbacks(bot);
 
   // Upload/text handlers must be registered last so command handlers match first.
   registerUploadHandlers(bot);
   registerTextHandler(bot);
 
-  bot.catch((error, ctx) => {
+  bot.catch(async (error, ctx) => {
     logger.error("telegram.unhandled_error", { error: String(error), updateType: ctx.updateType });
+    // The budget brake surfaces here from any command that doesn't catch it
+    // itself — without a reply the command would appear to do nothing at all.
+    if (error instanceof BudgetExceededError) {
+      await ctx.reply(error.message);
+    }
   });
 
   return bot;

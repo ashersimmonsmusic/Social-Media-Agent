@@ -6,6 +6,7 @@ import { aiProvider, recordUsage } from "./AIService.js";
 import { AGENT_TOOLS } from "./agentTools.js";
 import { buildToolExecutor } from "./toolExecutor.js";
 import { listActiveBrandRules } from "../modules/brand/brand.service.js";
+import { checkAiBudget } from "./budget.js";
 import type { ConversationTurn } from "./types.js";
 
 /** How many past turns to replay as context. Keeps cost bounded on a long-running chat. */
@@ -71,6 +72,8 @@ export async function converseWithAsher(params: {
   telegramChatId: string;
   message: string;
 }): Promise<string> {
+  const budgetWarning = await checkAiBudget();
+
   const history = await loadHistory(params.telegramChatId);
   history.push({ role: "user", content: params.message });
 
@@ -87,7 +90,9 @@ export async function converseWithAsher(params: {
   await appendTurn(params.telegramChatId, "user", params.message);
   await appendTurn(params.telegramChatId, "assistant", result.text);
 
-  return result.text;
+  // The warning is shown but deliberately not persisted — it's about the
+  // account, not part of the conversation the model should later re-read.
+  return budgetWarning ? `${budgetWarning}\n\n${result.text}` : result.text;
 }
 
 export async function clearHistory(telegramChatId: string) {

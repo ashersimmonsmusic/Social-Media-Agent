@@ -2,6 +2,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import { logger } from "../lib/logger.js";
 import { ClaudeProvider } from "./ClaudeProvider.js";
+import { checkAiBudget } from "./budget.js";
 import type { AIProvider, GenerateOptions, GenerateResult, TaskType } from "./types.js";
 
 // Approximate USD per 1M tokens (input, output). Rough figures for cost
@@ -19,6 +20,9 @@ const PRICING_PER_MILLION_TOKENS: Record<string, { input: number; output: number
 };
 /** Opus-tier rates, so an unrecognised model over-reports rather than under-reports. */
 const DEFAULT_PRICING = { input: 5, output: 25 };
+
+const CACHE_READ_MULTIPLIER = 0.1;
+const CACHE_WRITE_MULTIPLIER = 1.25;
 
 /**
  * Model IDs come in both alias (`claude-haiku-4-5`) and dated
@@ -63,6 +67,8 @@ export class AIService {
       throw new Error(`${taskType} is not implemented in Phase 1 — interface reserved for a later phase.`);
     }
 
+    await checkAiBudget();
+
     const model = MODEL_FOR_TASK[taskType];
     const system = options?.system ? `${GROUNDING_INSTRUCTION}\n\n${options.system}` : GROUNDING_INSTRUCTION;
 
@@ -79,8 +85,13 @@ export class AIService {
 /** Records what a call cost. Every path that reaches the provider goes through here. */
 export async function recordUsage(taskType: TaskType, result: GenerateResult) {
   const pricing = priceFor(result.model);
+  // Cache reads bill at 0.1x input and writes at 1.25x; usage.input_tokens
+  // excludes both, so they have to be priced separately or spend under-reports.
   const estimatedCostUsd =
-    (result.promptTokens / 1_000_000) * pricing.input + (result.completionTokens / 1_000_000) * pricing.output;
+    (result.promptTokens / 1_000_000) * pricing.input +
+    (result.cacheReadTokens / 1_000_000) * pricing.input * CACHE_READ_MULTIPLIER +
+    (result.cacheWriteTokens / 1_000_000) * pricing.input * CACHE_WRITE_MULTIPLIER +
+    (result.completionTokens / 1_000_000) * pricing.output;
 
   await prisma.aIUsageLog.create({
     data: {
@@ -89,23 +100,13 @@ export async function recordUsage(taskType: TaskType, result: GenerateResult) {
       taskType,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
+      cacheReadTokens: result.cacheReadTokens,
+      cacheWriteTokens: result.cacheWriteTokens,
       estimatedCostUsd,
     },
   });
 
   logger.info("ai.usage", { taskType, model: result.model, estimatedCostUsd: estimatedCostUsd.toFixed(4) });
-}
-
-export async function getMonthToDateAiSpend(): Promise<number> {
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  startOfMonth.setHours(0, 0, 0, 0);
-
-  const rows = await prisma.aIUsageLog.findMany({
-    where: { createdAt: { gte: startOfMonth } },
-    select: { estimatedCostUsd: true },
-  });
-  return rows.reduce((sum, row) => sum + row.estimatedCostUsd, 0);
 }
 
 export const aiProvider: AIProvider = new ClaudeProvider(env.ANTHROPIC_API_KEY);
