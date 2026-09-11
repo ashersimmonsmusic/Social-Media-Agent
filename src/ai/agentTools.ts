@@ -126,12 +126,13 @@ export const AGENT_TOOLS: AgentTool[] = [
     inputSchema: {
       type: "object",
       properties: {
-        contentType: { type: "string", enum: ["event", "pressMention", "article"] },
+        contentType: { type: "string", enum: ["post", "event", "pressMention", "article"] },
         fields: {
           type: "object",
           description:
-            "The document's fields. event: name, date (ISO datetime), venue, city, ticketUrl?, status?. " +
-            "pressMention: outlet, quote?, url?. article: title, publication?, date?, excerpt?, url?.",
+            "The document's fields. post: title, body (plain prose; blank lines separate paragraphs, a line starting " +
+            "'## ' becomes a subheading), excerpt?, publishedAt?. event: name, date (ISO datetime), venue, city, " +
+            "ticketUrl?, status?. pressMention: outlet, quote?, url?. article: title, publication?, date?, excerpt?, url?.",
         },
         rationale: { type: "string", description: "One line on what this is, for Asher to weigh up." },
       },

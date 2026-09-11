@@ -7,9 +7,9 @@
  * before anything is written.
  */
 
-export type WebsiteContentType = "event" | "pressMention" | "article";
+export type WebsiteContentType = "event" | "pressMention" | "article" | "post";
 
-export const WEBSITE_CONTENT_TYPES: WebsiteContentType[] = ["event", "pressMention", "article"];
+export const WEBSITE_CONTENT_TYPES: WebsiteContentType[] = ["event", "pressMention", "article", "post"];
 
 /** Matches the status list on the event schema. */
 const EVENT_STATUSES = ["confirmed", "postponed", "cancelled", "sold-out"];
@@ -52,6 +52,8 @@ export function buildDocument(type: WebsiteContentType, input: Record<string, un
       return buildPressMention(input);
     case "article":
       return buildArticle(input);
+    case "post":
+      return buildPost(input);
   }
 }
 
@@ -140,5 +142,58 @@ function buildArticle(input: Record<string, unknown>): BuiltDocument {
       ...(url ? { url } : {}),
     },
     summary: publication ? `${title} (${publication})` : title,
+  };
+}
+
+/**
+ * Converts plain prose into Portable Text, the shape the post body field
+ * stores. Blank lines separate paragraphs, and a line starting with "## "
+ * becomes a subheading — enough structure to write a news post in, without
+ * asking the model to emit nested block JSON it would get subtly wrong.
+ */
+export function toPortableText(prose: string): Record<string, unknown>[] {
+  return prose
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph, index) => {
+      const heading = /^##\s+(.*)$/.exec(paragraph);
+      return {
+        _type: "block",
+        _key: `b${index}`,
+        style: heading ? "h2" : "normal",
+        markDefs: [],
+        children: [{ _type: "span", _key: `s${index}`, text: heading ? heading[1]! : paragraph, marks: [] }],
+      };
+    });
+}
+
+function buildPost(input: Record<string, unknown>): BuiltDocument {
+  const title = str(input, "title");
+  const body = str(input, "body");
+  const excerpt = str(input, "excerpt");
+  const publishedAt = str(input, "publishedAt");
+
+  const problems: string[] = [];
+  if (!title) problems.push("A news post needs a title.");
+  if (!body) problems.push("A news post needs some writing in it.");
+
+  const date = publishedAt ? new Date(publishedAt) : new Date();
+  if (Number.isNaN(date.getTime())) problems.push("I couldn't read that publish date.");
+  if (problems.length > 0) throw new InvalidDocumentError(problems);
+
+  const blocks = toPortableText(body);
+  if (blocks.length === 0) throw new InvalidDocumentError(["The post body came out empty."]);
+
+  return {
+    doc: {
+      _type: "post",
+      title,
+      slug: { _type: "slug", current: slugify(title) },
+      publishedAt: date.toISOString(),
+      ...(excerpt ? { excerpt } : {}),
+      body: blocks,
+    },
+    summary: `${title} — ${blocks.length} paragraph(s)`,
   };
 }
