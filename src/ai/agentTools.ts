@@ -78,9 +78,22 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "look_at_image",
+    description:
+      "Look at a photo in Asher's library and get a description of what's actually in it. Use this BEFORE writing any " +
+      "caption about a photo — without it you are writing blind and will produce something generic that doesn't match " +
+      "the image. Takes the asset id from search_content_library.",
+    inputSchema: {
+      type: "object",
+      properties: { assetId: { type: "string", description: "Asset id of the image to look at." } },
+      required: ["assetId"],
+    },
+  },
+  {
     name: "propose_social_post",
     description:
       "Put a social post in front of Asher as an approval card. This is the ONLY route anything takes to Instagram, " +
+      "Call look_at_image first whenever the post has a photo, so the caption is about what is actually in it. " +
       "and it posts only after he presses Approve — calling this does not publish. Instagram requires an image, so " +
       "pass assetId for a photo from his library (preferred) or mediaUrl for a public image; without either the post " +
       "cannot go out and you should say so.",

@@ -1,6 +1,8 @@
 import type { Telegram } from "telegraf";
 import { listAssets, searchAssets, listUnusedAssets, ingestText, getAsset } from "../modules/assets/asset.service.js";
 import { signedMediaUrl, MediaUrlUnavailableError } from "../lib/signedMedia.js";
+import { describeImageForCaption } from "../modules/knowledge/attachment.service.js";
+import { storage } from "../storage/index.js";
 import { listKnowledge, searchKnowledge } from "../modules/knowledge/knowledge.service.js";
 import { getOrCreateBrandProfile, listActiveBrandRules } from "../modules/brand/brand.service.js";
 import { listPendingApprovals, createApproval, type ApprovalPayload } from "../modules/approvals/approval.service.js";
@@ -21,8 +23,19 @@ export function buildToolExecutor(telegram: Telegram) {
         const query = typeof input.query === "string" ? input.query.trim() : "";
         const assets = query ? await searchAssets(query, 15) : await listAssets({ limit: 15 });
         if (assets.length === 0) return "No matching content in the library.";
+        // The description is written by the vision pass on upload — without it
+        // here the agent can't tell one photo from another.
         return assets
-          .map((a) => `- ${a.id} | ${a.assetType} | ${a.filename}${a.rawTextContent ? ` | "${a.rawTextContent.slice(0, 200)}"` : ""} | ${a.status}`)
+          .map((a) =>
+            [
+              `- ${a.id} | ${a.assetType} | ${a.filename}`,
+              a.description ? `shows: ${a.description}` : null,
+              a.rawTextContent ? `"${a.rawTextContent.slice(0, 200)}"` : null,
+              a.status,
+            ]
+              .filter(Boolean)
+              .join(" | "),
+          )
           .join("\n");
       }
 
@@ -91,6 +104,22 @@ export function buildToolExecutor(telegram: Telegram) {
         const approval = await createApproval({ level: "LEVEL_2", payload });
         await sendApprovalToTelegram(telegram, approval);
         return `Sent to Asher as approval ${approval.id}. He must press a button — nothing has been published or sent.`;
+      }
+
+      case "look_at_image": {
+        const assetId = String(input.assetId ?? "").trim();
+        if (!assetId) return "No asset id given.";
+        const asset = await getAsset(assetId);
+        if (!asset) return `No asset ${assetId} in the library — check the id with search_content_library.`;
+        if (!asset.mimeType?.startsWith("image/")) {
+          return `Asset ${assetId} is a ${asset.assetType.toLowerCase()}, not an image — there's nothing to look at.`;
+        }
+        try {
+          const data = await storage.read(asset.storageKey);
+          return await describeImageForCaption({ mediaType: asset.mimeType, data, filename: asset.filename });
+        } catch (error) {
+          return `Couldn't read that image: ${error instanceof Error ? error.message : String(error)}`;
+        }
       }
 
       case "propose_social_post": {

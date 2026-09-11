@@ -75,6 +75,37 @@ export async function analyseAttachment(input: {
   return parseAttachmentAnalysis(result.text);
 }
 
+const CAPTION_LOOK_PROMPT = `You are looking at a photo belonging to Asher Simmons, an independent musician, so that a caption can be written for it.
+
+Describe what is actually in the frame, concretely: the subject and what they are doing, the setting, the lighting and colour, the mood it gives off, how it's framed, and any text visible in the image.
+
+Do NOT write the caption, suggest hashtags, or invent context the photo doesn't show. Do not guess who someone is from their appearance, or claim to know what they were feeling. Describe only what is visible, so the caption can be written from it.
+
+Under 120 words, plain prose.`;
+
+/**
+ * Describes a photo in enough visual detail to write a caption from.
+ *
+ * Separate from analyseAttachment, which extracts stated facts and writes a
+ * one-line library summary — useful for search, far too thin to write a caption
+ * against.
+ */
+export async function describeImageForCaption(input: {
+  mediaType: string;
+  data: Buffer;
+  filename: string;
+}): Promise<string> {
+  if (!SUPPORTED_IMAGE_TYPES.includes(input.mediaType)) throw new UnsupportedAttachmentError(input.mediaType);
+  if (input.data.byteLength > MAX_ATTACHMENT_BYTES) throw new AttachmentTooLargeError(input.data.byteLength);
+
+  const result = await aiService.generate("STRATEGY", `Filename: ${input.filename}`, {
+    system: CAPTION_LOOK_PROMPT,
+    maxTokens: 1024,
+    attachments: [{ kind: "image", mediaType: input.mediaType, data: input.data, filename: input.filename }],
+  });
+  return result.text.trim();
+}
+
 export function canAnalyse(mediaType: string | undefined): boolean {
   if (!mediaType) return false;
   return mediaType === "application/pdf" || SUPPORTED_IMAGE_TYPES.includes(mediaType);
