@@ -117,6 +117,47 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "propose_website_content",
+    description:
+      "Put something on Asher's website in front of him as an approval card. Handles the content types the site " +
+      "already has: 'event' (a gig), 'pressMention' (a quote or review), 'article' (a link to coverage about him). " +
+      "It is written to the site only after he presses Approve. If he wants something the site has no type for — a " +
+      "blog with body text, a new section, a shop — use request_website_change instead, do NOT force it into these.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        contentType: { type: "string", enum: ["event", "pressMention", "article"] },
+        fields: {
+          type: "object",
+          description:
+            "The document's fields. event: name, date (ISO datetime), venue, city, ticketUrl?, status?. " +
+            "pressMention: outlet, quote?, url?. article: title, publication?, date?, excerpt?, url?.",
+        },
+        rationale: { type: "string", description: "One line on what this is, for Asher to weigh up." },
+      },
+      required: ["contentType", "fields"],
+    },
+  },
+  {
+    name: "request_website_change",
+    description:
+      "File a request with Claude Code for website work you cannot do yourself — a new section, a new kind of " +
+      "content the site has no type for, a design or layout change, or a bug on the site. This opens an issue on the " +
+      "website repository for a developer session to pick up; it does NOT change the site. Say that plainly to Asher: " +
+      "it's been written down, not done. Include everything he said about what he wants, in his words.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short summary of the request, as an issue title." },
+        details: {
+          type: "string",
+          description: "What Asher wants and why, in enough detail to act on without asking him again.",
+        },
+      },
+      required: ["title", "details"],
+    },
+  },
+  {
     name: "propose_behavior_rule",
     description:
       "Propose a standing instruction for Asher to approve — use ONLY when he explicitly tells you to change how you " +

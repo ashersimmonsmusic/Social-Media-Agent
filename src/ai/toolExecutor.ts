@@ -9,6 +9,9 @@ import { listPendingApprovals, createApproval, type ApprovalPayload } from "../m
 import { sendApprovalToTelegram } from "../telegram/notify.js";
 import { validateForPlatform } from "../modules/social/social.service.js";
 import type { SocialPostPayload } from "../telegram/commands/social.js";
+import { publishToWebsite, requestWebsiteChange } from "../modules/website/website.service.js";
+import { buildDocument, InvalidDocumentError, WEBSITE_CONTENT_TYPES, type WebsiteContentType } from "../modules/website/documents.js";
+import type { WebsiteContentPayload } from "../telegram/commands/website.js";
 import { logger } from "../lib/logger.js";
 
 /** Runs the tools declared in agentTools.ts. Kept separate so the tool
@@ -168,6 +171,61 @@ export function buildToolExecutor(telegram: Telegram) {
         const approval = await createApproval({ type: "SOCIAL_POST", level: "LEVEL_2", payload });
         await sendApprovalToTelegram(telegram, approval);
         return `Sent as an Instagram post for approval (${approval.id}). Nothing is published until Asher presses Approve.`;
+      }
+
+      case "propose_website_content": {
+        const contentType = String(input.contentType ?? "") as WebsiteContentType;
+        if (!WEBSITE_CONTENT_TYPES.includes(contentType)) {
+          return `The site has no "${contentType}" content type. It has: ${WEBSITE_CONTENT_TYPES.join(", ")}. Use request_website_change for anything else.`;
+        }
+        const fields = (input.fields ?? {}) as Record<string, unknown>;
+        const rationale = String(input.rationale ?? "").trim();
+
+        // Validate against the real schema now — Sanity accepts almost anything,
+        // so a bad document lands silently broken rather than erroring.
+        let summary: string;
+        let document: Record<string, unknown>;
+        try {
+          const built = buildDocument(contentType, fields);
+          summary = built.summary;
+          document = built.doc;
+        } catch (error) {
+          if (error instanceof InvalidDocumentError) {
+            return `Not proposed — ${error.message} Ask Asher for what's missing rather than guessing it.`;
+          }
+          throw error;
+        }
+
+        const payload: WebsiteContentPayload = {
+          title: `Add to your website — ${contentType}`,
+          summary: rationale || summary,
+          fields: Object.fromEntries(
+            Object.entries(document)
+              .filter(([key]) => key !== "_type")
+              .map(([key, value]) => [key, typeof value === "object" ? JSON.stringify(value) : String(value)]),
+          ),
+          actions: ["APPROVE", "REJECT"],
+          contentType,
+          document,
+        };
+        const approval = await createApproval({ type: "WEBSITE_CONTENT", level: "LEVEL_2", payload });
+        await sendApprovalToTelegram(telegram, approval);
+        return `Sent for approval (${approval.id}). Nothing is on the site until Asher presses Approve.`;
+      }
+
+      case "request_website_change": {
+        const title = String(input.title ?? "").trim();
+        const details = String(input.details ?? "").trim();
+        if (!title || !details) return "I need a title and details before I can file that.";
+        try {
+          const url = await requestWebsiteChange({
+            title,
+            body: `${details}\n\n---\nFiled from Telegram by Asher's agent.`,
+          });
+          return `Filed with Claude Code: ${url}. Tell Asher it's written down for a developer session to pick up — it is NOT done.`;
+        } catch (error) {
+          return `Couldn't file that: ${error instanceof Error ? error.message : String(error)}`;
+        }
       }
 
       case "propose_behavior_rule": {

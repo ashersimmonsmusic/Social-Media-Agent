@@ -24,4 +24,5 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "connect", description: "Link your Instagram account for posting" },
   { command: "accounts", description: "Which accounts are linked, and recent posts" },
   { command: "disconnect", description: "Unlink Instagram so nothing can post" },
+  { command: "website", description: "What I can add to your website" },
 ];

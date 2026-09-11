@@ -50,6 +50,15 @@ const envSchema = z.object({
   SOCIAL_TOKEN_KEY: z.string().optional(),
   META_GRAPH_API_VERSION: z.string().default("v21.0"),
 
+  // Website. Content goes into Sanity, which the Next.js site renders from;
+  // anything needing real code goes to GitHub as an issue instead.
+  SANITY_PROJECT_ID: z.string().optional(),
+  SANITY_DATASET: z.string().default("production"),
+  SANITY_API_VERSION: z.string().default("2021-06-07"),
+  SANITY_WRITE_TOKEN: z.string().optional(),
+  GITHUB_TOKEN: z.string().optional(),
+  WEBSITE_REPO: z.string().default("ashersimmonsmusic/ashersimmonsmusic.com"),
+
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_PATH: z.string().default("./uploads"),
 
