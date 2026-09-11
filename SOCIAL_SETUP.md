@@ -34,9 +34,10 @@ will work — start there.
 
 In the Graph API Explorer (<https://developers.facebook.com/tools/explorer>):
 
-1. Select your app, then generate a user token with these permissions:
-   `pages_show_list`, `instagram_basic`, `instagram_content_publish`,
-   `pages_read_engagement`
+1. Select your app, then generate a user token. For this step you only need
+   `pages_show_list` and `instagram_basic` — `instagram_content_publish` is for
+   posting later and is gated behind App Review, so don't get stuck if it isn't
+   offered yet. It only appears once the Instagram product is added to the app.
 2. Query `me/accounts` to find your Page, and copy its `id`.
 3. Query `<page-id>?fields=instagram_business_account`.
 
