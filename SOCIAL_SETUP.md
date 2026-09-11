@@ -71,12 +71,17 @@ Until review passes, you can only publish to accounts with a role on the app
 
 ## Step 5 — Configure Railway
 
-Add two variables:
+Add three variables:
 
 ```
 SOCIAL_TOKEN_KEY=<output of: openssl rand -hex 32>
 META_GRAPH_API_VERSION=v21.0
+PUBLIC_BASE_URL=https://<your-app>.up.railway.app
 ```
+
+`PUBLIC_BASE_URL` is your Railway public domain, with no trailing path. It's how
+Instagram reaches images from your library; without it you can only post image
+URLs that are already public elsewhere.
 
 `SOCIAL_TOKEN_KEY` encrypts stored tokens, so a database dump doesn't hand over
 posting access. If you change it later, stored tokens become undecryptable and
@@ -98,8 +103,9 @@ In Telegram:
 /connect 17841400000000000 EAAB...your-page-token accountname
 ```
 
-Then **delete that message.** It contains a token that can post as you. Telegram
-keeps message history, and the bot cannot delete your messages for you.
+The bot deletes that message straight away, since it carries a token that can post
+as you. If it replies that it couldn't, delete it yourself — that means Telegram
+refused, and the token is still sitting in your history.
 
 Check it worked with `/accounts`.
 
@@ -126,10 +132,12 @@ approved post is a real, public post.**
   caption is validated (2200 characters, 30 hashtags) before a card is raised, so
   you don't approve something that then fails.
 - Instagram fetches the image from a **public HTTPS URL**; it doesn't accept
-  uploaded bytes. Files in your library live on the Railway volume and aren't
-  publicly reachable, so for now pass an image URL that's already public — one from
-  your website, for instance. Posting straight from your library needs public media
-  serving, which isn't built yet.
+  uploaded bytes. Photos in your library are served from `/media/<asset-id>` on a
+  signed link that expires after an hour, minted at the moment you approve. The
+  signature covers the asset id and expiry, so a guessed, edited or stale link
+  gets nothing, and only images are ever served — never contracts or audio.
+  This needs `PUBLIC_BASE_URL` set to your Railway domain. You can also pass any
+  already-public image URL instead.
 
 ## If something fails
 
@@ -137,7 +145,8 @@ approved post is a real, public post.**
 
 - *"Media URL unreachable"* — Instagram couldn't fetch your image. It must be
   public, HTTPS, and not behind Cloudflare bot protection.
-- *"no text-only post"* — you didn't give an image URL.
+- *"no text-only post"* — no image was given. Name a photo from your library, or
+  pass a public image URL.
 - *Permission errors* — App Review hasn't passed, or the token lacks
   `instagram_content_publish`.
 - *Token expired* — reconnect with a fresh Page token via `/connect`.

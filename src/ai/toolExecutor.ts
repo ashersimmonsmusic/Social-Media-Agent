@@ -1,5 +1,6 @@
 import type { Telegram } from "telegraf";
-import { listAssets, searchAssets, listUnusedAssets, ingestText } from "../modules/assets/asset.service.js";
+import { listAssets, searchAssets, listUnusedAssets, ingestText, getAsset } from "../modules/assets/asset.service.js";
+import { signedMediaUrl, MediaUrlUnavailableError } from "../lib/signedMedia.js";
 import { listKnowledge, searchKnowledge } from "../modules/knowledge/knowledge.service.js";
 import { getOrCreateBrandProfile, listActiveBrandRules } from "../modules/brand/brand.service.js";
 import { listPendingApprovals, createApproval, type ApprovalPayload } from "../modules/approvals/approval.service.js";
@@ -94,9 +95,25 @@ export function buildToolExecutor(telegram: Telegram) {
 
       case "propose_social_post": {
         const caption = String(input.caption ?? "").trim();
-        const mediaUrl = typeof input.mediaUrl === "string" ? input.mediaUrl.trim() : undefined;
         const rationale = String(input.rationale ?? "").trim();
+        const assetId = typeof input.assetId === "string" ? input.assetId.trim() : undefined;
         if (!caption) return "No caption provided — nothing to propose.";
+
+        // A library asset needs a public link Instagram can fetch; anything
+        // else has to already be public.
+        let mediaUrl = typeof input.mediaUrl === "string" ? input.mediaUrl.trim() : undefined;
+        if (assetId) {
+          const asset = await getAsset(assetId);
+          if (!asset) return `No asset ${assetId} in the library — check the id with search_content_library.`;
+          if (!asset.mimeType?.startsWith("image/")) {
+            return `Asset ${assetId} is a ${asset.assetType.toLowerCase()}, not an image. Instagram needs an image.`;
+          }
+          try {
+            mediaUrl = signedMediaUrl(assetId);
+          } catch (error) {
+            return error instanceof MediaUrlUnavailableError ? error.message : String(error);
+          }
+        }
 
         // Check the platform's own rules first: raising a card that would fail
         // on approval is worse than saying now what's wrong with it.
@@ -117,6 +134,7 @@ export function buildToolExecutor(telegram: Telegram) {
           platform: "INSTAGRAM",
           caption,
           mediaUrl,
+          assetId,
         };
         const approval = await createApproval({ type: "SOCIAL_POST", level: "LEVEL_2", payload });
         await sendApprovalToTelegram(telegram, approval);

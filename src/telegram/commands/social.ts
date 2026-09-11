@@ -10,6 +10,7 @@ import {
   publishPost,
 } from "../../modules/social/social.service.js";
 import { MissingTokenKeyError } from "../../lib/tokenCrypto.js";
+import { signedMediaUrl } from "../../lib/signedMedia.js";
 import { logger } from "../../lib/logger.js";
 import { commandTrigger } from "./trigger.js";
 
@@ -28,10 +29,15 @@ export function registerSocialCommands(bot: Telegraf) {
     const payload = approval.payload as unknown as SocialPostPayload;
     const caption = payload.fields?.["Caption"] ?? payload.caption;
 
+    // Mint the media link now, not when the card was raised: a card can sit
+    // unanswered for days, by which point the link signed back then has expired
+    // and Instagram would fail to fetch the image.
+    const mediaUrl = payload.assetId ? signedMediaUrl(payload.assetId) : payload.mediaUrl;
+
     const post = await publishPost({
       platform: payload.platform,
       caption,
-      mediaUrl: payload.mediaUrl,
+      mediaUrl,
       assetId: payload.assetId,
     });
 

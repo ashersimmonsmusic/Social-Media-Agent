@@ -82,14 +82,21 @@ export const AGENT_TOOLS: AgentTool[] = [
     description:
       "Put a social post in front of Asher as an approval card. This is the ONLY route anything takes to Instagram, " +
       "and it posts only after he presses Approve — calling this does not publish. Instagram requires an image, so " +
-      "include mediaUrl with a public https image URL; without one the post cannot go out and you should say so.",
+      "pass assetId for a photo from his library (preferred) or mediaUrl for a public image; without either the post " +
+      "cannot go out and you should say so.",
     inputSchema: {
       type: "object",
       properties: {
         caption: { type: "string", description: "The full caption exactly as it should appear, hashtags included." },
+        assetId: {
+          type: "string",
+          description:
+            "Id of an image in Asher's content library to post, from search_content_library. Preferred over mediaUrl — " +
+            "a public link is generated for it automatically.",
+        },
         mediaUrl: {
           type: "string",
-          description: "Public https URL of the image to post. Instagram fetches it, so it must be reachable publicly.",
+          description: "Public https URL of an image, for something not in the library. Use assetId when you can.",
         },
         rationale: { type: "string", description: "One line on why this post, for Asher to weigh up." },
       },
