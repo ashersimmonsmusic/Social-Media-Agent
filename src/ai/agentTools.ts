@@ -94,6 +94,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     description:
       "Put a social post in front of Asher as an approval card. This is the ONLY route anything takes to Instagram, " +
       "Call look_at_image first whenever the post has a photo, so the caption is about what is actually in it. " +
+      "Pass scheduledFor to have it go out later instead of straight away. " +
       "and it posts only after he presses Approve — calling this does not publish. Instagram requires an image, so " +
       "pass assetId for a photo from his library (preferred) or mediaUrl for a public image; without either the post " +
       "cannot go out and you should say so.",
@@ -111,10 +112,23 @@ export const AGENT_TOOLS: AgentTool[] = [
           type: "string",
           description: "Public https URL of an image, for something not in the library. Use assetId when you can.",
         },
+        scheduledFor: {
+          type: "string",
+          description:
+            "ISO 8601 time to post it, e.g. 2026-05-03T18:00:00+01:00. Omit to post as soon as he approves. " +
+            "Call current_time first so you resolve 'Friday at 6' against the real date.",
+        },
         rationale: { type: "string", description: "One line on why this post, for Asher to weigh up." },
       },
       required: ["caption"],
     },
+  },
+  {
+    name: "current_time",
+    description:
+      "Get the current date and time in Asher's timezone. Call this BEFORE scheduling anything — you do not otherwise " +
+      "know what day it is, so you cannot work out what 'Friday' or 'tomorrow at 6' means without it.",
+    inputSchema: { type: "object", properties: {}, required: [] },
   },
   {
     name: "propose_website_content",

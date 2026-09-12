@@ -89,7 +89,7 @@ export async function listConnectedAccounts() {
 }
 
 /** Loads an account and decrypts its token for immediate use. */
-async function activeAccount(platform: SocialPlatform): Promise<{ id: string; connected: ConnectedAccount }> {
+export async function activeAccountFor(platform: SocialPlatform): Promise<{ id: string; connected: ConnectedAccount }> {
   const account = await prisma.socialAccount.findFirst({ where: { platform, isActive: true } });
   if (!account) throw new NoAccountError(platform);
   return {
@@ -117,7 +117,7 @@ export async function publishPost(input: {
   mediaUrl?: string;
   assetId?: string;
 }) {
-  const { id: socialAccountId, connected } = await activeAccount(input.platform);
+  const { id: socialAccountId, connected } = await activeAccountFor(input.platform);
   const adapter = adapterFor(input.platform);
 
   const post = await prisma.socialPost.create({

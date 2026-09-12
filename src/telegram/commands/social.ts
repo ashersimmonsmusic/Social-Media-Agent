@@ -11,6 +11,12 @@ import {
 } from "../../modules/social/social.service.js";
 import { MissingTokenKeyError } from "../../lib/tokenCrypto.js";
 import { signedMediaUrl } from "../../lib/signedMedia.js";
+import {
+  cancelScheduledPost,
+  listScheduledPosts,
+  schedulePost,
+  SchedulingError,
+} from "../../modules/social/scheduler.service.js";
 import { logger } from "../../lib/logger.js";
 import { commandTrigger } from "./trigger.js";
 
@@ -20,6 +26,8 @@ export interface SocialPostPayload extends ApprovalPayload {
   caption: string;
   mediaUrl?: string;
   assetId?: string;
+  /** ISO timestamp. Present means approving queues it rather than posting now. */
+  scheduledFor?: string;
 }
 
 export function registerSocialCommands(bot: Telegraf) {
@@ -28,6 +36,32 @@ export function registerSocialCommands(bot: Telegraf) {
   registerApprovalAction("SOCIAL_POST", async (approval) => {
     const payload = approval.payload as unknown as SocialPostPayload;
     const caption = payload.fields?.["Caption"] ?? payload.caption;
+
+    // Approving a scheduled post authorises a future publish rather than an
+    // immediate one; the queue runner does the posting when its time comes.
+    if (payload.scheduledFor) {
+      let post;
+      try {
+        post = await schedulePost({
+          platform: payload.platform,
+          caption,
+          assetId: payload.assetId,
+          scheduledFor: new Date(payload.scheduledFor),
+        });
+      } catch (error) {
+        // A card can sit unanswered past its own slot — approving it then
+        // shouldn't post something whose moment has gone.
+        if (error instanceof SchedulingError) {
+          return `I didn't schedule that — ${error.message} Ask me again with a new time.`;
+        }
+        throw error;
+      }
+      return (
+        `Scheduled for ${formatWhen(post.scheduledFor)}.\n\n` +
+        `It goes out on its own then — nothing else needed from you. ` +
+        `See it with /scheduled, or cancel with /cancel ${post.id}.`
+      );
+    }
 
     // Mint the media link now, not when the card was raised: a card can sit
     // unanswered for days, by which point the link signed back then has expired
@@ -100,6 +134,40 @@ export function registerSocialCommands(bot: Telegraf) {
     }
   });
 
+  bot.command(commandTrigger("scheduled"), async (ctx) => {
+    const posts = await listScheduledPosts();
+    if (posts.length === 0) {
+      await ctx.reply("Nothing scheduled. Ask me to post something at a particular time and I'll queue it up.");
+      return;
+    }
+
+    const lines = ["SCHEDULED POSTS", ""];
+    for (const post of posts) {
+      lines.push(
+        `• ${formatWhen(post.scheduledFor)} — ${post.socialAccount.platform}`,
+        `  ${post.caption.slice(0, 90)}${post.caption.length > 90 ? "…" : ""}`,
+        `  cancel: /cancel ${post.id}`,
+        "",
+      );
+    }
+    lines.push(env.DRY_RUN ? "DRY_RUN is ON — these won't post for real." : "DRY_RUN is OFF — these will go live.");
+    await ctx.reply(lines.join("\n").slice(0, 4000));
+  });
+
+  bot.command(commandTrigger("cancel"), async (ctx) => {
+    const id = ctx.payload.trim();
+    if (!id) {
+      await ctx.reply("Usage: /cancel <post-id>\n\nRun /scheduled to see the ids.");
+      return;
+    }
+    const cancelled = await cancelScheduledPost(id);
+    await ctx.reply(
+      cancelled
+        ? "Cancelled — that one won't go out."
+        : "I couldn't cancel that. Either the id is wrong, or it has already posted. Check /scheduled.",
+    );
+  });
+
   bot.command(commandTrigger("disconnect"), async (ctx) => {
     const count = await disconnectAccount("INSTAGRAM");
     await ctx.reply(
@@ -135,5 +203,18 @@ export function registerSocialCommands(bot: Telegraf) {
     }
 
     await ctx.reply(lines.join("\n").slice(0, 4000));
+  });
+}
+
+/** Renders a scheduled time in Asher's own timezone, not UTC. */
+function formatWhen(when: Date | null): string {
+  if (!when) return "an unknown time";
+  return when.toLocaleString("en-GB", {
+    timeZone: "Europe/London",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }

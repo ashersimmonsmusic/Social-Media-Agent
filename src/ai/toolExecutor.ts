@@ -8,11 +8,15 @@ import { getOrCreateBrandProfile, listActiveBrandRules } from "../modules/brand/
 import { listPendingApprovals, createApproval, type ApprovalPayload } from "../modules/approvals/approval.service.js";
 import { sendApprovalToTelegram } from "../telegram/notify.js";
 import { validateForPlatform } from "../modules/social/social.service.js";
+import { MIN_LEAD_MS } from "../modules/social/scheduler.service.js";
 import type { SocialPostPayload } from "../telegram/commands/social.js";
 import { publishToWebsite, requestWebsiteChange } from "../modules/website/website.service.js";
 import { buildDocument, InvalidDocumentError, WEBSITE_CONTENT_TYPES, type WebsiteContentType } from "../modules/website/documents.js";
 import type { WebsiteContentPayload } from "../telegram/commands/website.js";
 import { logger } from "../lib/logger.js";
+
+/** Asher is Bristol-based; scheduling reads naturally in his own time. */
+const TIMEZONE = "Europe/London";
 
 /** Runs the tools declared in agentTools.ts. Kept separate so the tool
  *  definitions stay free of service/config imports and remain directly testable. */
@@ -131,6 +135,20 @@ export function buildToolExecutor(telegram: Telegram) {
         const assetId = typeof input.assetId === "string" ? input.assetId.trim() : undefined;
         if (!caption) return "No caption provided — nothing to propose.";
 
+        // Reject an unusable time now rather than at the approval, which could
+        // be hours later and long after he's stopped paying attention.
+        let scheduledFor: string | undefined;
+        if (typeof input.scheduledFor === "string" && input.scheduledFor.trim()) {
+          const when = new Date(input.scheduledFor.trim());
+          if (Number.isNaN(when.getTime())) {
+            return `I couldn't read "${input.scheduledFor}" as a time. Check current_time and give a full ISO timestamp.`;
+          }
+          if (when.getTime() - Date.now() < MIN_LEAD_MS) {
+            return `${when.toISOString()} is in the past or too close to now. Check current_time and pick a later slot.`;
+          }
+          scheduledFor = when.toISOString();
+        }
+
         // A library asset needs a public link Instagram can fetch; anything
         // else has to already be public.
         let mediaUrl = typeof input.mediaUrl === "string" ? input.mediaUrl.trim() : undefined;
@@ -160,17 +178,45 @@ export function buildToolExecutor(telegram: Telegram) {
         const payload: SocialPostPayload = {
           title: "Instagram post — approve to publish",
           summary: rationale || "Drafted for your Instagram.",
-          fields: { Caption: caption, ...(mediaUrl ? { Image: mediaUrl } : {}) },
+          fields: {
+            Caption: caption,
+            ...(mediaUrl ? { Image: mediaUrl } : {}),
+            // Shown on the card so he can see he's approving a future post,
+            // not an immediate one.
+            ...(scheduledFor
+              ? {
+                  "Goes out": new Date(scheduledFor).toLocaleString("en-GB", {
+                    timeZone: TIMEZONE,
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                }
+              : {}),
+          },
           actions: ["APPROVE", "EDIT", "REJECT"],
           editableField: "Caption",
           platform: "INSTAGRAM",
           caption,
           mediaUrl,
           assetId,
+          ...(scheduledFor ? { scheduledFor } : {}),
         };
         const approval = await createApproval({ type: "SOCIAL_POST", level: "LEVEL_2", payload });
         await sendApprovalToTelegram(telegram, approval);
-        return `Sent as an Instagram post for approval (${approval.id}). Nothing is published until Asher presses Approve.`;
+        return scheduledFor
+          ? `Sent for approval (${approval.id}). When Asher approves it, it goes out at ${scheduledFor} — not before.`
+          : `Sent as an Instagram post for approval (${approval.id}). Nothing is published until Asher presses Approve.`;
+      }
+
+      case "current_time": {
+        const now = new Date();
+        return [
+          `UTC: ${now.toISOString()}`,
+          `Asher's local time (${TIMEZONE}): ${now.toLocaleString("en-GB", { timeZone: TIMEZONE, dateStyle: "full", timeStyle: "short" })}`,
+        ].join("\n");
       }
 
       case "propose_website_content": {

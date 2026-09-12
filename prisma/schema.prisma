@@ -327,6 +327,11 @@ model SocialAccount {
 enum SocialPostStatus {
   DRAFT
   AWAITING_APPROVAL
+  /// Approved by Asher, waiting for its scheduled time.
+  SCHEDULED
+  /// Claimed by the scheduler. Exists so a restart or a second instance can't
+  /// pick up the same post and publish it twice.
+  PUBLISHING
   PUBLISHED
   FAILED
   CANCELLED
@@ -340,6 +345,8 @@ model SocialPost {
   assetId         String?
   asset           Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
   status          SocialPostStatus @default(DRAFT)
+  /// When this should go out. Null means it was published immediately.
+  scheduledFor    DateTime?
   /// The platform's id for the published post, or a dry-run marker.
   platformPostId  String?
   publishedAt     DateTime?
@@ -350,4 +357,5 @@ model SocialPost {
   updatedAt       DateTime         @updatedAt
 
   @@index([status, createdAt])
+  @@index([status, scheduledFor])
 }

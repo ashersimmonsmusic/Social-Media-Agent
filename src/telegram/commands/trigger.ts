@@ -25,4 +25,6 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "accounts", description: "Which accounts are linked, and recent posts" },
   { command: "disconnect", description: "Unlink Instagram so nothing can post" },
   { command: "website", description: "What I can add to your website" },
+  { command: "scheduled", description: "Posts queued to go out later" },
+  { command: "cancel", description: "Cancel a scheduled post" },
 ];

@@ -5,6 +5,7 @@ import { logger } from "./lib/logger.js";
 import { router } from "./http/router.js";
 import { createBot } from "./telegram/bot.js";
 import { COMMANDS } from "./telegram/commands/trigger.js";
+import { startScheduler, stopScheduler } from "./modules/social/scheduler.service.js";
 
 async function main() {
   const app = express();
@@ -38,12 +39,20 @@ async function main() {
     logger.info("telegram.polling_started");
   }
 
+  startScheduler();
+
   app.listen(env.PORT, () => {
     logger.info("http.listening", { port: env.PORT, dryRun: env.DRY_RUN });
   });
 
-  process.once("SIGINT", () => bot.stop("SIGINT"));
-  process.once("SIGTERM", () => bot.stop("SIGTERM"));
+  process.once("SIGINT", () => {
+    stopScheduler();
+    bot.stop("SIGINT");
+  });
+  process.once("SIGTERM", () => {
+    stopScheduler();
+    bot.stop("SIGTERM");
+  });
 }
 
 main().catch((error) => {
