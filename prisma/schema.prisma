@@ -360,3 +360,29 @@ model SocialPost {
   @@index([status, createdAt])
   @@index([status, scheduledFor])
 }
+
+// ── Connected third-party accounts (OAuth) ───────────────────────────────
+
+enum OAuthProvider {
+  GOOGLE
+}
+
+/// An OAuth grant Asher has given the bot. Kept generic because Google covers
+/// both Drive and, later, YouTube — the same account, with more scopes.
+model OAuthAccount {
+  id           String        @id @default(cuid())
+  provider     OAuthProvider
+  /// Which account authorised it, so /drive can say whose Drive this is.
+  accountEmail String?
+  /// AES-256-GCM ciphertext. Never stored or logged in plaintext.
+  accessToken  String
+  /// Long-lived; this is what survives an access token expiring.
+  refreshToken String?
+  expiresAt    DateTime?
+  scopes       String[]      @default([])
+  isActive     Boolean       @default(true)
+  connectedAt  DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([provider])
+}

@@ -15,6 +15,7 @@ import { buildDocument, InvalidDocumentError, WEBSITE_CONTENT_TYPES, type Websit
 import type { WebsiteContentPayload } from "../telegram/commands/website.js";
 import { getStats, formatStats } from "../modules/analytics/analytics.service.js";
 import { getRecipients } from "../modules/email/newsletter.service.js";
+import { listVideos, formatVideoList } from "../modules/drive/drive.service.js";
 import type { NewsletterPayload } from "../telegram/commands/newsletter.js";
 import { logger } from "../lib/logger.js";
 
@@ -242,6 +243,14 @@ export function buildToolExecutor(telegram: Telegram) {
         const approval = await createApproval({ type: "NEWSLETTER", level: "LEVEL_2", payload });
         await sendApprovalToTelegram(telegram, approval);
         return `Sent for approval (${approval.id}). It reaches ${recipientCount} subscriber(s) only once Asher approves it.`;
+      }
+
+      case "list_drive_videos": {
+        try {
+          return formatVideoList(await listVideos(15));
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
       }
 
       case "get_stats": {

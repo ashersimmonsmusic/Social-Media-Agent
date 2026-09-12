@@ -140,6 +140,14 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "list_drive_videos",
+    description:
+      "List the videos in Asher's Google Drive, newest first, with their length and dimensions. Use when he asks " +
+      "what footage he has or refers to a video without naming a file. Returns ids for later use. If Drive isn't " +
+      "connected, say so and tell him to run /drive — don't pretend to have looked.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "get_stats",
     description:
       "Get Asher's actual numbers: posts published and scheduled, newsletter subscribers, paid sales, library size, " +

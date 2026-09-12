@@ -4,6 +4,7 @@ import { getMonthToDateAiSpend } from "../ai/budget.js";
 import { getAsset } from "../modules/assets/asset.service.js";
 import { storage } from "../storage/index.js";
 import { verifyMediaSignature } from "../lib/signedMedia.js";
+import { completeConnection, verifyState } from "../modules/oauth/google.service.js";
 import { logger } from "../lib/logger.js";
 
 export const router = Router();
@@ -57,6 +58,38 @@ router.get("/media/:assetId", async (req, res) => {
   } catch (error) {
     logger.error("media.read_failed", { assetId, error: String(error) });
     res.status(404).json({ error: "not found" });
+  }
+});
+
+/**
+ * Where Google sends Asher back after he approves access. Public by necessity —
+ * Google redirects a browser here — so the signed, short-lived `state` is what
+ * proves the flow began in his own chat rather than from someone hitting the URL.
+ */
+router.get("/oauth/google/callback", async (req, res) => {
+  const code = typeof req.query.code === "string" ? req.query.code : "";
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const error = typeof req.query.error === "string" ? req.query.error : "";
+
+  if (error) {
+    res.status(400).send(`Google reported: ${error}. Nothing was connected.`);
+    return;
+  }
+  if (!code || !verifyState(state)) {
+    res.status(403).send("That link is invalid or has expired. Run /drive in Telegram for a fresh one.");
+    return;
+  }
+
+  try {
+    const account = await completeConnection(code);
+    res.send(
+      `Google Drive connected${account.accountEmail ? ` as ${account.accountEmail}` : ""}. ` +
+        `You can close this tab and go back to Telegram.`,
+    );
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    logger.error("oauth.google_callback_failed", { error: detail });
+    res.status(500).send(`Couldn't finish connecting: ${detail}`);
   }
 });
 

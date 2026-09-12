@@ -72,6 +72,12 @@ const envSchema = z.object({
   NEWSLETTER_UNSUBSCRIBE_SECRET: z.string().optional(),
   WEBSITE_URL: z.string().default("https://www.ashersimmonsmusic.com"),
 
+  // Google Drive. Read-only: the bot lists and fetches video, nothing more.
+  // Restricting to one folder keeps its reach to what Asher puts there.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
+
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_PATH: z.string().default("./uploads"),
 
