@@ -59,6 +59,12 @@ const envSchema = z.object({
   GITHUB_TOKEN: z.string().optional(),
   WEBSITE_REPO: z.string().default("ashersimmonsmusic/ashersimmonsmusic.com"),
 
+  // Subscriber and sales figures. The service role key is required, not the
+  // anon key: newsletter_subscribers is insert-only under RLS, so an anon key
+  // reads an empty list rather than erroring.
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_PATH: z.string().default("./uploads"),
 

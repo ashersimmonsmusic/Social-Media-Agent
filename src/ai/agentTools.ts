@@ -124,6 +124,14 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "get_stats",
+    description:
+      "Get Asher's actual numbers: posts published and scheduled, newsletter subscribers, paid sales, library size, " +
+      "AI spend. Use this before answering anything about how he's doing, rather than guessing. It cannot see " +
+      "Instagram reach or Spotify streams — say so plainly if he asks for those.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "current_time",
     description:
       "Get the current date and time in Asher's timezone. Call this BEFORE scheduling anything — you do not otherwise " +

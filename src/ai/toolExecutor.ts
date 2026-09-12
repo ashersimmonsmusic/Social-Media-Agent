@@ -13,6 +13,7 @@ import type { SocialPostPayload } from "../telegram/commands/social.js";
 import { publishToWebsite, requestWebsiteChange } from "../modules/website/website.service.js";
 import { buildDocument, InvalidDocumentError, WEBSITE_CONTENT_TYPES, type WebsiteContentType } from "../modules/website/documents.js";
 import type { WebsiteContentPayload } from "../telegram/commands/website.js";
+import { getStats, formatStats } from "../modules/analytics/analytics.service.js";
 import { logger } from "../lib/logger.js";
 
 /** Asher is Bristol-based; scheduling reads naturally in his own time. */
@@ -209,6 +210,14 @@ export function buildToolExecutor(telegram: Telegram) {
         return scheduledFor
           ? `Sent for approval (${approval.id}). When Asher approves it, it goes out at ${scheduledFor} — not before.`
           : `Sent as an Instagram post for approval (${approval.id}). Nothing is published until Asher presses Approve.`;
+      }
+
+      case "get_stats": {
+        try {
+          return formatStats(await getStats());
+        } catch (error) {
+          return `Couldn't read the numbers: ${error instanceof Error ? error.message : String(error)}`;
+        }
       }
 
       case "current_time": {
