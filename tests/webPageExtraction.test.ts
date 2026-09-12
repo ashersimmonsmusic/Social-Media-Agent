@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractLinks, extractText, extractTitle, normaliseUrl, PageFetchError } from "../src/modules/knowledge/webPage.service.js";
+import { extractLinks, extractText, extractTitle, normaliseUrl, PageFetchError , summariseStructuredData, extractMeta, extractJsonLd } from "../src/modules/knowledge/webPage.service.js";
 import { parseDrafts } from "../src/modules/knowledge/parseDrafts.js";
 
 describe("extractText", () => {
@@ -101,5 +101,69 @@ describe("parseDrafts", () => {
   it("returns an empty array for unparseable output instead of throwing", () => {
     expect(parseDrafts("I could not find anything.")).toEqual([]);
     expect(parseDrafts("[{broken json")).toEqual([]);
+  });
+});
+
+describe("structured data from client-rendered pages", () => {
+  it("reads JSON-LD that extractText would have thrown away", () => {
+    const html = `<html><head><script type="application/ld+json">
+      {"@type":"MusicRecording","name":"Brighter Days","datePublished":"2025-03-14","genre":"Soul"}
+    </script></head><body><div id="root"></div></body></html>`;
+
+    // The prose really is empty — this is the client-rendered case.
+    expect(extractText(html)).toBe("");
+    const structured = summariseStructuredData(html);
+    expect(structured).toContain("Brighter Days");
+    expect(structured).toContain("2025-03-14");
+    expect(structured).toContain("[MusicRecording]");
+  });
+
+  it("flattens a schema.org @graph", () => {
+    const html = `<script type="application/ld+json">
+      {"@context":"https://schema.org","@graph":[
+        {"@type":"MusicGroup","name":"Asher Simmons"},
+        {"@type":"Event","name":"Live at the Louisiana","startDate":"2026-05-03T20:00:00Z"}
+      ]}
+    </script>`;
+    const structured = summariseStructuredData(html);
+    expect(structured).toContain("Asher Simmons");
+    expect(structured).toContain("Live at the Louisiana");
+  });
+
+  it("resolves a nested node to its name, not [object Object]", () => {
+    const html = `<script type="application/ld+json">
+      {"@type":"Event","name":"Gig","location":{"@type":"Place","name":"The Louisiana"}}
+    </script>`;
+    expect(summariseStructuredData(html)).toContain("The Louisiana");
+    expect(summariseStructuredData(html)).not.toContain("object Object");
+  });
+
+  it("keeps the other blocks when one is malformed", () => {
+    const html = `<script type="application/ld+json">{not json</script>
+      <script type="application/ld+json">{"@type":"Article","headline":"Survived"}</script>`;
+    expect(summariseStructuredData(html)).toContain("Survived");
+  });
+
+  it("reads OpenGraph tags, which almost every site emits", () => {
+    const html = `<meta property="og:title" content="Asher Simmons — Brighter Days">
+      <meta name="description" content="The new single.">
+      <meta property="og:image" content="https://example.com/a.jpg">`;
+    const meta = extractMeta(html);
+    expect(meta["og:title"]).toBe("Asher Simmons — Brighter Days");
+    expect(meta["description"]).toBe("The new single.");
+  });
+
+  it("ignores unrelated meta tags rather than dumping the whole head", () => {
+    const html = `<meta name="viewport" content="width=device-width"><meta name="theme-color" content="#000">`;
+    expect(extractMeta(html)).toEqual({});
+  });
+
+  it("returns empty for a page with neither, so the caller can say so honestly", () => {
+    expect(summariseStructuredData("<html><body><p>Just words.</p></body></html>")).toBe("");
+  });
+
+  it("ignores a script that merely mentions ld+json in its code", () => {
+    const html = `<script>const type = "application/ld+json"; steal();</script>`;
+    expect(extractJsonLd(html)).toEqual([]);
   });
 });

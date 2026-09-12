@@ -4,6 +4,12 @@ export interface FetchedPage {
   text: string;
   /** Links found on the page, useful for discovering sub-pages and streaming/social profiles. */
   links: string[];
+  /**
+   * Facts the page declares about itself in JSON-LD and meta tags, rendered as
+   * readable lines. Often the only usable content on a site whose prose is
+   * rendered client-side, and cleaner than scraped prose even when both exist.
+   */
+  structured: string;
 }
 
 export class PageFetchError extends Error {}
@@ -12,12 +18,15 @@ const MAX_BYTES = 2_000_000;
 const FETCH_TIMEOUT_MS = 15_000;
 
 /**
- * Fetches a page and reduces it to readable text.
+ * Fetches a page and reduces it to readable text plus whatever it declares
+ * about itself in structured form.
  *
- * This reads server-rendered HTML only. A site that renders its content
- * purely client-side will yield little or no text, which `extractText`
- * surfaces as an honest "not enough readable text" rather than a silent
- * empty import.
+ * No JavaScript is executed. Most sites that render their prose client-side
+ * still emit JSON-LD and OpenGraph tags into the initial HTML — for music and
+ * events that structured data is usually richer and more reliable than the
+ * prose would have been, so reading it recovers most of what running a
+ * browser would buy, at no cost. A page offering neither still surfaces as an
+ * honest "not enough readable content" rather than a silent empty import.
  */
 export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
   const url = normaliseUrl(rawUrl);
@@ -60,6 +69,7 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
     title: extractTitle(html),
     text: extractText(html),
     links: extractLinks(html, url),
+    structured: summariseStructuredData(html),
   };
 }
 
@@ -149,4 +159,101 @@ function decodeEntities(text: string): string {
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
     .replace(/&([a-z]+);/gi, (whole, name: string) => named[name.toLowerCase()] ?? whole);
+}
+
+/**
+ * Pulls out JSON-LD blocks. Must run before extractText, which strips every
+ * script tag — including these.
+ */
+export function extractJsonLd(html: string): unknown[] {
+  const blocks: unknown[] = [];
+  const pattern = /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null) {
+    try {
+      const parsed: unknown = JSON.parse(match[1]!.trim());
+      // A page may publish one object, an array, or a schema.org @graph.
+      if (Array.isArray(parsed)) blocks.push(...parsed);
+      else if (parsed && typeof parsed === "object" && Array.isArray((parsed as { "@graph"?: unknown[] })["@graph"])) {
+        blocks.push(...(parsed as { "@graph": unknown[] })["@graph"]);
+      } else if (parsed) blocks.push(parsed);
+    } catch {
+      // One malformed block shouldn't lose the others.
+    }
+  }
+  return blocks;
+}
+
+/** Reads OpenGraph and standard meta tags, which nearly every site emits. */
+export function extractMeta(html: string): Record<string, string> {
+  const meta: Record<string, string> = {};
+  const pattern = /<meta\b([^>]*)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html)) !== null) {
+    const attrs = match[1]!;
+    const name = /\b(?:property|name)\s*=\s*["']([^"']+)["']/i.exec(attrs)?.[1];
+    const content = /\bcontent\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1];
+    if (!name || !content) continue;
+    const key = name.toLowerCase();
+    if (key === "description" || key.startsWith("og:") || key.startsWith("music:") || key.startsWith("article:")) {
+      meta[key] = decodeEntities(content).trim();
+    }
+  }
+  return meta;
+}
+
+/** Values worth surfacing from a JSON-LD node, in the order they read best. */
+const JSON_LD_FIELDS = [
+  "name",
+  "headline",
+  "description",
+  "datePublished",
+  "startDate",
+  "endDate",
+  "genre",
+  "byArtist",
+  "performer",
+  "location",
+  "address",
+  "url",
+  "sameAs",
+];
+
+function renderValue(value: unknown, depth = 0): string | null {
+  if (value == null || depth > 2) return null;
+  if (typeof value === "string" || typeof value === "number") return String(value).trim() || null;
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => renderValue(item, depth + 1)).filter(Boolean);
+    return parts.length > 0 ? parts.join(", ") : null;
+  }
+  if (typeof value === "object") {
+    const node = value as Record<string, unknown>;
+    // Nested nodes are usually a named thing — a venue, an artist, a place.
+    return renderValue(node.name ?? node.headline ?? node.address ?? null, depth + 1);
+  }
+  return null;
+}
+
+export function summariseStructuredData(html: string): string {
+  const lines: string[] = [];
+
+  for (const node of extractJsonLd(html)) {
+    if (!node || typeof node !== "object") continue;
+    const record = node as Record<string, unknown>;
+    const type = renderValue(record["@type"]);
+    const parts: string[] = [];
+    for (const field of JSON_LD_FIELDS) {
+      const rendered = renderValue(record[field]);
+      if (rendered) parts.push(`${field}: ${rendered}`);
+    }
+    if (parts.length > 0) lines.push(`[${type ?? "item"}] ${parts.join(" | ")}`);
+  }
+
+  const meta = extractMeta(html);
+  const metaLines = Object.entries(meta)
+    .filter(([, value]) => value.length > 0)
+    .map(([key, value]) => `${key}: ${value}`);
+  if (metaLines.length > 0) lines.push(...metaLines);
+
+  return lines.join("\n").trim();
 }
