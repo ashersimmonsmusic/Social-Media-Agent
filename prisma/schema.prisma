@@ -206,6 +206,7 @@ enum ApprovalType {
   KNOWLEDGE_IMPORT
   BEHAVIOR_RULE
   WEBSITE_CONTENT
+  NEWSLETTER
 }
 
 enum ApprovalLevel {

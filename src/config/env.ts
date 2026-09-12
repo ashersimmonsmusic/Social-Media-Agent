@@ -65,6 +65,13 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
+  // Newsletter. The unsubscribe secret must match the website's copy, or every
+  // unsubscribe link silently fails to verify — worse than having none.
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().default("Asher Simmons Music <hello@ashersimmonsmusic.com>"),
+  NEWSLETTER_UNSUBSCRIBE_SECRET: z.string().optional(),
+  WEBSITE_URL: z.string().default("https://www.ashersimmonsmusic.com"),
+
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_PATH: z.string().default("./uploads"),
 

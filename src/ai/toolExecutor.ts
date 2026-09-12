@@ -14,6 +14,8 @@ import { publishToWebsite, requestWebsiteChange } from "../modules/website/websi
 import { buildDocument, InvalidDocumentError, WEBSITE_CONTENT_TYPES, type WebsiteContentType } from "../modules/website/documents.js";
 import type { WebsiteContentPayload } from "../telegram/commands/website.js";
 import { getStats, formatStats } from "../modules/analytics/analytics.service.js";
+import { getRecipients } from "../modules/email/newsletter.service.js";
+import type { NewsletterPayload } from "../telegram/commands/newsletter.js";
 import { logger } from "../lib/logger.js";
 
 /** Asher is Bristol-based; scheduling reads naturally in his own time. */
@@ -210,6 +212,36 @@ export function buildToolExecutor(telegram: Telegram) {
         return scheduledFor
           ? `Sent for approval (${approval.id}). When Asher approves it, it goes out at ${scheduledFor} — not before.`
           : `Sent as an Instagram post for approval (${approval.id}). Nothing is published until Asher presses Approve.`;
+      }
+
+      case "propose_newsletter": {
+        const subject = String(input.subject ?? "").trim();
+        const body = String(input.body ?? "").trim();
+        const rationale = String(input.rationale ?? "").trim();
+        if (!subject || !body) return "A newsletter needs both a subject and a body.";
+
+        // Check the list is readable before raising a card — discovering at
+        // approval that there's nobody to send to wastes his decision.
+        let recipientCount: number;
+        try {
+          recipientCount = (await getRecipients()).length;
+        } catch (error) {
+          return `Can't send email yet: ${error instanceof Error ? error.message : String(error)}`;
+        }
+        if (recipientCount === 0) return "Nobody is subscribed yet, so there's nobody to send to.";
+
+        const payload: NewsletterPayload = {
+          title: "Newsletter — approve to send",
+          summary: `${rationale || "Drafted for your list."}\n\nGoes to ${recipientCount} subscriber(s). Email can't be unsent.`,
+          fields: { Subject: subject, Email: body },
+          actions: ["APPROVE", "EDIT", "REJECT"],
+          editableField: "Email",
+          subject,
+          body,
+        };
+        const approval = await createApproval({ type: "NEWSLETTER", level: "LEVEL_2", payload });
+        await sendApprovalToTelegram(telegram, approval);
+        return `Sent for approval (${approval.id}). It reaches ${recipientCount} subscriber(s) only once Asher approves it.`;
       }
 
       case "get_stats": {

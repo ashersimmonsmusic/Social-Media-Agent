@@ -124,6 +124,22 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "propose_newsletter",
+    description:
+      "Put an email newsletter in front of Asher as an approval card. It goes to everyone subscribed on his website, " +
+      "and only after he presses Approve. Email cannot be recalled once sent, so never imply it has gone out — say " +
+      "you've put it to him. Write the body as plain prose; an unsubscribe footer is added automatically.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subject: { type: "string", description: "Subject line. Concrete and specific, not clickbait." },
+        body: { type: "string", description: "The email as plain prose. Blank lines separate paragraphs." },
+        rationale: { type: "string", description: "One line on what this is and why now." },
+      },
+      required: ["subject", "body"],
+    },
+  },
+  {
     name: "get_stats",
     description:
       "Get Asher's actual numbers: posts published and scheduled, newsletter subscribers, paid sales, library size, " +

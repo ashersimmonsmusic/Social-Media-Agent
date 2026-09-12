@@ -47,11 +47,12 @@ export async function getStats(): Promise<Stats> {
 
   try {
     const [all, recent] = await Promise.all([
-      selectRows("newsletter_subscribers", { select: "id", limit: "1" }),
+      selectRows("newsletter_subscribers", { select: "id", limit: "1", unsubscribed_at: "is.null" }),
       selectRows("newsletter_subscribers", {
         select: "id",
         limit: "1",
         created_at: `gte.${monthStart.toISOString()}`,
+        unsubscribed_at: "is.null",
       }),
     ]);
     stats.audience = { subscribers: all.total, newThisMonth: recent.total };
