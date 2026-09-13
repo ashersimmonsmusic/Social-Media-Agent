@@ -1,13 +1,15 @@
 import type { Telegram } from "telegraf";
 import { listAssets, searchAssets, listUnusedAssets, ingestText, getAsset } from "../modules/assets/asset.service.js";
 import { signedMediaUrl, MediaUrlUnavailableError } from "../lib/signedMedia.js";
+import { prepareVideoForReels, formatPreparedVideo } from "../modules/video/video.service.js";
+import type { ReframeMode } from "../modules/video/reframe.service.js";
 import { describeImageForCaption } from "../modules/knowledge/attachment.service.js";
 import { storage } from "../storage/index.js";
 import { listKnowledge, searchKnowledge } from "../modules/knowledge/knowledge.service.js";
 import { getOrCreateBrandProfile, listActiveBrandRules } from "../modules/brand/brand.service.js";
 import { listPendingApprovals, createApproval, type ApprovalPayload } from "../modules/approvals/approval.service.js";
-import { sendApprovalToTelegram } from "../telegram/notify.js";
-import { validateForPlatform } from "../modules/social/social.service.js";
+import { sendApprovalToTelegram, sendVideoPreview } from "../telegram/notify.js";
+import { validateForPlatform, mediaForAsset, AssetNotPublishableError } from "../modules/social/social.service.js";
 import { MIN_LEAD_MS } from "../modules/social/scheduler.service.js";
 import type { SocialPostPayload } from "../telegram/commands/social.js";
 import { publishToWebsite, requestWebsiteChange } from "../modules/website/website.service.js";
@@ -156,22 +158,28 @@ export function buildToolExecutor(telegram: Telegram) {
         // A library asset needs a public link Instagram can fetch; anything
         // else has to already be public.
         let mediaUrl = typeof input.mediaUrl === "string" ? input.mediaUrl.trim() : undefined;
+        let mediaKind: "IMAGE" | "VIDEO" | undefined;
         if (assetId) {
           const asset = await getAsset(assetId);
           if (!asset) return `No asset ${assetId} in the library — check the id with search_content_library.`;
-          if (!asset.mimeType?.startsWith("image/")) {
-            return `Asset ${assetId} is a ${asset.assetType.toLowerCase()}, not an image. Instagram needs an image.`;
-          }
           try {
-            mediaUrl = signedMediaUrl(assetId);
+            const media = await mediaForAsset(assetId);
+            mediaUrl = media.mediaUrl;
+            mediaKind = media.mediaKind;
           } catch (error) {
+            if (error instanceof AssetNotPublishableError) {
+              return (
+                `${error.message} Instagram needs a photo or a vertical video — ` +
+                `use prepare_video_for_reels if this started life as footage in Drive.`
+              );
+            }
             return error instanceof MediaUrlUnavailableError ? error.message : String(error);
           }
         }
 
         // Check the platform's own rules first: raising a card that would fail
         // on approval is worse than saying now what's wrong with it.
-        const validation = await validateForPlatform("INSTAGRAM", { caption, mediaUrl });
+        const validation = await validateForPlatform("INSTAGRAM", { caption, mediaUrl, mediaKind });
         if (!validation.ok) {
           return (
             `Not proposed — Instagram would reject this: ${validation.problems.join(" ")} ` +
@@ -184,7 +192,9 @@ export function buildToolExecutor(telegram: Telegram) {
           summary: rationale || "Drafted for your Instagram.",
           fields: {
             Caption: caption,
-            ...(mediaUrl ? { Image: mediaUrl } : {}),
+            // Labelled by what it actually is: "Image" against a Reel reads as
+            // though the wrong thing is attached.
+            ...(mediaUrl ? { [mediaKind === "VIDEO" ? "Video" : "Image"]: mediaUrl } : {}),
             // Shown on the card so he can see he's approving a future post,
             // not an immediate one.
             ...(scheduledFor
@@ -250,6 +260,53 @@ export function buildToolExecutor(telegram: Telegram) {
           return formatVideoList(await listVideos(15));
         } catch (error) {
           return error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      case "prepare_video_for_reels": {
+        const args = input as { drive_file_id?: string; mode?: string; start_seconds?: number };
+        if (!args.drive_file_id) return "I need the Drive file id — call list_drive_videos first.";
+
+        const mode: ReframeMode =
+          args.mode === "crop" || args.mode === "blur" || args.mode === "auto" ? args.mode : "auto";
+
+        try {
+          const prepared = await prepareVideoForReels({
+            driveFileId: args.drive_file_id,
+            mode,
+            startSeconds: args.start_seconds,
+          });
+
+          // Send the finished clip into the chat. The reframe is a judgement
+          // call and this is the only moment Asher can overrule it before it
+          // reaches anyone else, so he gets to watch it, not read about it.
+          let previewed = false;
+          try {
+            const asset = await getAsset(prepared.assetId);
+            if (asset?.storageKey) {
+              previewed = await sendVideoPreview(telegram, {
+                data: await storage.read(asset.storageKey),
+                filename: prepared.filename,
+                caption: prepared.reason,
+              });
+            }
+          } catch (error) {
+            logger.error("tool.prepare_video_preview_failed", { error: String(error) });
+          }
+
+          return (
+            formatPreparedVideo(prepared) +
+            (previewed
+              ? "\n\nI've sent the clip to the chat — tell Asher to watch it before approving anything."
+              : "\n\nI could not send a preview to the chat, so tell him plainly that he has NOT seen this clip yet.")
+          );
+        } catch (error) {
+          // Every failure here is something Asher can act on — a clip too big, a
+          // Drive that isn't connected, ffmpeg missing — so the reason is
+          // returned rather than swallowed.
+          const detail = error instanceof Error ? error.message : String(error);
+          logger.error("tool.prepare_video_failed", { error: detail });
+          return `I couldn't prepare that video: ${detail}`;
         }
       }
 

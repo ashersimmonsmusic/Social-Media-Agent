@@ -148,6 +148,36 @@ export const AGENT_TOOLS: AgentTool[] = [
     inputSchema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "prepare_video_for_reels",
+    description:
+      "Take one video from Asher's Google Drive and turn it into a vertical 9:16 clip in his content library, ready " +
+      "to post as a Reel. Get the id from list_drive_videos first. This looks at the actual footage to decide how to " +
+      "reframe it: if there's a clear subject that stays put it crops in on it, and if not it keeps the whole frame " +
+      "with a blurred fill so nothing is cut off. It publishes nothing — it returns an asset id you then pass to " +
+      "propose_social_post. Instagram's API caps Reels at 90 seconds, so for longer footage pass start_seconds to " +
+      "pick which 90 you want. Rendering takes a minute or two; tell him it's running before you call it. Report the " +
+      "reframing decision back to him in your own words, including when the result has blurred bars, so he is not " +
+      "surprised by it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        drive_file_id: { type: "string", description: "The Drive file id from list_drive_videos." },
+        mode: {
+          type: "string",
+          enum: ["auto", "crop", "blur"],
+          description:
+            "Leave as auto unless he asked for something specific. 'crop' forces a centre crop and loses the edges; " +
+            "'blur' forces the full frame with a blurred fill.",
+        },
+        start_seconds: {
+          type: "number",
+          description: "Seconds into the source to start from. Only needed for footage longer than 90 seconds.",
+        },
+      },
+      required: ["drive_file_id"],
+    },
+  },
+  {
     name: "get_stats",
     description:
       "Get Asher's actual numbers: posts published and scheduled, newsletter subscribers, paid sales, library size, " +

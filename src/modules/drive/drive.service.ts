@@ -1,3 +1,6 @@
+import { createWriteStream } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { env } from "../../config/env.js";
 import { getAccessToken } from "../oauth/google.service.js";
 
@@ -107,6 +110,33 @@ export async function downloadVideo(fileId: string, maxBytes: number): Promise<B
     supportsAllDrives: "true",
   });
   return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * Streams a file straight to disk instead of through memory.
+ *
+ * `downloadVideo` above returns a Buffer, which is fine for something small but
+ * would hold a whole clip in RAM at once — and video is the one thing here big
+ * enough for that to kill the container. ffmpeg needs a real file on disk
+ * anyway, so for video this is both lighter and what the next step wants.
+ */
+export async function downloadToFile(fileId: string, destination: string, maxBytes: number): Promise<DriveVideo> {
+  const meta = await getVideo(fileId);
+  if (meta.sizeBytes > maxBytes) {
+    throw new DriveError(
+      `${meta.name} is ${(meta.sizeBytes / 1024 / 1024).toFixed(0)}MB, over the ` +
+        `${(maxBytes / 1024 / 1024).toFixed(0)}MB limit I can process. Export a smaller version and try again.`,
+    );
+  }
+
+  const response = await driveRequest(`files/${encodeURIComponent(fileId)}`, {
+    alt: "media",
+    supportsAllDrives: "true",
+  });
+  if (!response.body) throw new DriveError(`Google Drive sent nothing for ${meta.name}.`);
+
+  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(destination));
+  return meta;
 }
 
 export function formatDuration(millis?: number): string {

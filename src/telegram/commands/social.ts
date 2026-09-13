@@ -8,9 +8,9 @@ import {
   listConnectedAccounts,
   listRecentPosts,
   publishPost,
+  mediaForAsset,
 } from "../../modules/social/social.service.js";
 import { MissingTokenKeyError } from "../../lib/tokenCrypto.js";
-import { signedMediaUrl } from "../../lib/signedMedia.js";
 import {
   cancelScheduledPost,
   listScheduledPosts,
@@ -66,12 +66,13 @@ export function registerSocialCommands(bot: Telegraf) {
     // Mint the media link now, not when the card was raised: a card can sit
     // unanswered for days, by which point the link signed back then has expired
     // and Instagram would fail to fetch the image.
-    const mediaUrl = payload.assetId ? signedMediaUrl(payload.assetId) : payload.mediaUrl;
+    const media = payload.assetId ? await mediaForAsset(payload.assetId) : undefined;
 
     const post = await publishPost({
       platform: payload.platform,
       caption,
-      mediaUrl,
+      mediaUrl: media?.mediaUrl ?? payload.mediaUrl,
+      mediaKind: media?.mediaKind,
       assetId: payload.assetId,
     });
 

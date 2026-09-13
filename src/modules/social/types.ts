@@ -8,6 +8,13 @@ export interface DraftPost {
    * than accepting bytes, so this cannot be a local path or storage key.
    */
   mediaUrl?: string;
+  /**
+   * Whether `mediaUrl` points at a still or a clip. Instagram treats the two as
+   * different post types with different parameters and a different publishing
+   * sequence, and there is no way to infer which from the URL alone — the media
+   * route serves both from the same path shape.
+   */
+  mediaKind?: "IMAGE" | "VIDEO";
 }
 
 export interface ValidationResult {

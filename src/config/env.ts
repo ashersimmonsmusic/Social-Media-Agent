@@ -78,6 +78,11 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
 
+  // Video processing. The source cap exists because ffmpeg works on a real file
+  // on the container's ephemeral disk: a 2GB source would fill it and fail the
+  // whole app, not just the render.
+  VIDEO_MAX_SOURCE_MB: z.coerce.number().positive().default(300),
+
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_PATH: z.string().default("./uploads"),
 

@@ -92,23 +92,30 @@ worth doing once, shared across all four adapters — not four times.
 
 The spec's phases are right. Reordered only where a dependency forces it.
 
-| Phase | Work | Blocked by |
+| Phase | Work | Status / blocked by |
 |---|---|---|
-| **0** | Import Asher's knowledge base (below) | — |
-| **1** | Video intake: signed upload page, object storage, `Video` model | Storage decision |
-| **2** | ffmpeg in the image; probe duration/dimensions; extract audio | — |
-| **3** | Transcription with timestamps | **ASR provider decision** |
-| **4** | Frame sampling → Claude vision → video analysis | 2 |
+| **0** | Import Asher's knowledge base (below) | Not started — still the highest-value item |
+| **1** | Video intake | **Done** — Google Drive, not an upload page |
+| **2** | ffmpeg in the image; probe duration/dimensions | **Done** |
+| **2b** | Vertical reframing (subject-aware crop, blurred fill) | **Done** — see `VIDEO_WORKFLOW.md` |
+| **2c** | Reels publishing: REELS container, status polling, range-serving media | **Done** — gated on App Review |
+| **3** | Audio extraction + transcription with timestamps | **ASR provider decision** (ElevenLabs Scribe at $0.22/hr is the current front-runner; Whisper self-hosted is free but slower and more to run) |
+| **4** | Frame sampling → Claude vision → full video analysis | Partly done: frames are sampled for the reframe decision, but only to locate a subject, not to understand content |
 | **5** | Clip identification: best moments, hooks, why | 3, 4 |
-| **6** | Clip extraction, aspect ratio, subtitles | 2 |
+| **6** | Cutting between shots, burned-in subtitles | 2 — deliberately not built; CapCut does this free on a phone |
 | **7** | Platform-specific caption generation | 5 |
-| **8** | Extend the library + approval flow to video | 1 |
-| **9** | Shared OAuth layer | — |
+| **8** | Extend the library + approval flow to video | **Done** |
+| **9** | Shared OAuth layer | Partly done — Google OAuth built, Meta still uses a pasted token |
 | **10** | YouTube adapter | 9 |
 | **11** | TikTok adapter | 9, audit |
 | **12** | X adapter | 9, paid tier |
 | **13** | Platform analytics ingestion | 9 |
 | **14** | Content intelligence over that data | 13 |
+
+**What phase 2b does not do.** The reframe looks at six stills to find the
+subject. It does not know what happens in the clip, what is said, or where the
+good bit is — those need phase 3 and 4. Until then a caption for a video depends
+on Asher saying what's in it.
 
 **Phase 0 is new and should happen first.** Asher has written a detailed artist
 knowledge base — heritage, genre, spirituality, voice rules, what never to say,

@@ -2,8 +2,7 @@ import type { SocialPlatform } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { recordAudit } from "../audit/audit.service.js";
-import { signedMediaUrl } from "../../lib/signedMedia.js";
-import { adapterFor, activeAccountFor, NoAccountError } from "./social.service.js";
+import { adapterFor, activeAccountFor, mediaForAsset, NoAccountError } from "./social.service.js";
 
 /**
  * How late a post may be before it's abandoned rather than published.
@@ -127,10 +126,14 @@ async function publishClaimedPost(post: {
   try {
     // Media links are minted now, not when it was scheduled — a link signed
     // days ago would have expired long before this runs.
-    const mediaUrl = post.assetId ? signedMediaUrl(post.assetId) : undefined;
+    const media = post.assetId ? await mediaForAsset(post.assetId) : undefined;
     const { connected } = await activeAccountFor(platform);
 
-    const result = await adapterFor(platform).publish(connected, { caption: post.caption, mediaUrl });
+    const result = await adapterFor(platform).publish(connected, {
+      caption: post.caption,
+      mediaUrl: media?.mediaUrl,
+      mediaKind: media?.mediaKind,
+    });
     await prisma.socialPost.update({
       where: { id: post.id },
       data: {

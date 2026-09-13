@@ -1,5 +1,6 @@
 import type { SocialPlatform } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import { signedMediaUrl } from "../../lib/signedMedia.js";
 import { decryptToken, encryptToken } from "../../lib/tokenCrypto.js";
 import { recordAudit } from "../audit/audit.service.js";
 import { InstagramAdapter } from "./instagram.adapter.js";
@@ -102,6 +103,45 @@ export async function activeAccountFor(platform: SocialPlatform): Promise<{ id: 
   };
 }
 
+export class AssetNotPublishableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AssetNotPublishableError";
+  }
+}
+
+/**
+ * Mints the public link for one library asset and says whether it's a still or a
+ * clip.
+ *
+ * Both facts come from the same lookup on purpose. Instagram publishes the two
+ * along different paths, and a video sent down the image path is rejected with
+ * an error that names neither — so the kind is established here, once, rather
+ * than guessed at each call site.
+ *
+ * Always called at publish time, never when a card is raised: a signed link has
+ * an hour on it and an approval card can sit for days.
+ */
+export async function mediaForAsset(assetId: string): Promise<{ mediaUrl: string; mediaKind: "IMAGE" | "VIDEO" }> {
+  const asset = await prisma.asset.findUnique({
+    where: { id: assetId },
+    select: { mimeType: true, assetType: true, filename: true },
+  });
+  if (!asset) throw new AssetNotPublishableError(`I can't find asset ${assetId} in your library any more.`);
+
+  const mimeType = asset.mimeType ?? "";
+  const isVideo = mimeType.startsWith("video/") || (!mimeType && asset.assetType === "VIDEO");
+  const isImage = mimeType.startsWith("image/") || (!mimeType && asset.assetType === "PHOTO");
+
+  if (!isVideo && !isImage) {
+    throw new AssetNotPublishableError(
+      `${asset.filename} isn't an image or a video, so Instagram has nothing to post.`,
+    );
+  }
+
+  return { mediaUrl: signedMediaUrl(assetId), mediaKind: isVideo ? "VIDEO" : "IMAGE" };
+}
+
 export async function validateForPlatform(platform: SocialPlatform, post: DraftPost): Promise<ValidationResult> {
   return adapterFor(platform).validate(post);
 }
@@ -115,6 +155,7 @@ export async function publishPost(input: {
   platform: SocialPlatform;
   caption: string;
   mediaUrl?: string;
+  mediaKind?: "IMAGE" | "VIDEO";
   assetId?: string;
 }) {
   const { id: socialAccountId, connected } = await activeAccountFor(input.platform);
@@ -130,7 +171,11 @@ export async function publishPost(input: {
   });
 
   try {
-    const result = await adapter.publish(connected, { caption: input.caption, mediaUrl: input.mediaUrl });
+    const result = await adapter.publish(connected, {
+      caption: input.caption,
+      mediaUrl: input.mediaUrl,
+      mediaKind: input.mediaKind,
+    });
     return prisma.socialPost.update({
       where: { id: post.id },
       data: {
