@@ -33,6 +33,23 @@ export class GoogleNotConnectedError extends Error {
   }
 }
 
+/**
+ * Google's stored permission has stopped working and only Asher can restore it.
+ *
+ * Distinct from "never connected" because the remedy reads differently: this one
+ * worked yesterday. The usual cause is an OAuth app still in Testing, where
+ * Google expires the refresh token after seven days — see DRIVE_SETUP.md.
+ */
+export class GoogleReauthRequiredError extends Error {
+  constructor(detail: string) {
+    super(
+      `Google has stopped accepting my saved permission (${detail}). Run /drive to reconnect — it takes a few seconds. ` +
+        `If this keeps happening every week, your Google app is still set to "Testing"; DRIVE_SETUP.md says how to fix it for good.`,
+    );
+    this.name = "GoogleReauthRequiredError";
+  }
+}
+
 function config() {
   const clientId = env.GOOGLE_CLIENT_ID;
   const clientSecret = env.GOOGLE_CLIENT_SECRET;
@@ -83,6 +100,7 @@ export function authorisationUrl(): string {
 }
 
 interface TokenResponse {
+  error?: string;
   access_token?: string;
   refresh_token?: string;
   expires_in?: number;
@@ -98,6 +116,11 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
   });
   const json = (await response.json()) as TokenResponse;
   if (!response.ok) {
+    // invalid_grant means the stored refresh token is dead — expired, revoked,
+    // or the account's password changed. Nothing retries its way out of that.
+    if (json.error === "invalid_grant") {
+      throw new GoogleReauthRequiredError(json.error_description ?? "the saved permission expired");
+    }
     throw new Error(`Google refused the token request: ${json.error_description ?? response.status}`);
   }
   return json;

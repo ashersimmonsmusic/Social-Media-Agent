@@ -6,6 +6,7 @@ import {
   getConnection,
   GoogleNotConfiguredError,
   GoogleNotConnectedError,
+  GoogleReauthRequiredError,
 } from "../../modules/oauth/google.service.js";
 import { listVideos, formatVideoList, DriveError } from "../../modules/drive/drive.service.js";
 import { prepareVideoForReels, formatPreparedVideo } from "../../modules/video/video.service.js";
@@ -42,7 +43,10 @@ export function registerDriveCommands(bot: Telegraf) {
         [
           "Google Drive isn't connected yet.",
           "",
-          "Open this link and approve access — it's read-only, so I can look at your videos but never change or delete anything:",
+          "Open this link and approve access — it's read-only, so I can look at your videos but never change or delete anything.",
+          "",
+          "Google will warn you it hasn't verified the app. That's expected — it's yours. Advanced → Go to the app.",
+          "",
           "",
           authorisationUrl(),
           "",
@@ -105,7 +109,11 @@ export function registerDriveCommands(bot: Telegraf) {
             : "\n\nThe clip is too big to send here, so you haven't seen it yet — it's in your library either way."),
       );
     } catch (error) {
-      if (error instanceof GoogleNotConnectedError || error instanceof GoogleNotConfiguredError) {
+      if (
+        error instanceof GoogleNotConnectedError ||
+        error instanceof GoogleNotConfiguredError ||
+        error instanceof GoogleReauthRequiredError
+      ) {
         await ctx.reply(error.message);
         return;
       }
@@ -134,7 +142,11 @@ export function registerDriveCommands(bot: Telegraf) {
       const videos = await listVideos(15);
       await ctx.reply(`YOUR VIDEOS\n\n${formatVideoList(videos)}`.slice(0, 4000));
     } catch (error) {
-      if (error instanceof GoogleNotConnectedError || error instanceof GoogleNotConfiguredError) {
+      if (
+        error instanceof GoogleNotConnectedError ||
+        error instanceof GoogleNotConfiguredError ||
+        error instanceof GoogleReauthRequiredError
+      ) {
         await ctx.reply(error.message);
         return;
       }
