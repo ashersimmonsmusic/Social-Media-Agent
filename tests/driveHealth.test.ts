@@ -13,6 +13,9 @@ class GoogleReauthRequiredError extends Error {
   }
 }
 
+// The watchdog now consults the service-account path, which reads env on import.
+vi.mock("../src/config/env.js", () => ({ env: { GOOGLE_SERVICE_ACCOUNT_JSON: undefined } }));
+
 vi.mock("../src/modules/oauth/google.service.js", () => ({
   GoogleReauthRequiredError,
   getConnection: async () => state.connection,
@@ -89,5 +92,20 @@ describe("checkDriveAccess", () => {
 
     expect(await checkDriveAccess(telegram)).toBe("ok");
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe("with a service account", () => {
+  it("has nothing to watch, because a service account cannot lapse", async () => {
+    const { env } = await import("../src/config/env.js");
+    (env as Record<string, unknown>).GOOGLE_SERVICE_ACCOUNT_JSON = '{"client_email":"a@b.iam.gserviceaccount.com","private_key":"x"}';
+    try {
+      // Would otherwise report a lapse — the service account path never gets there.
+      state.accessTokenError = new GoogleReauthRequiredError("expired");
+      expect(await checkDriveAccess(telegram)).toBe("ok");
+      expect(sent).toHaveLength(0);
+    } finally {
+      (env as Record<string, unknown>).GOOGLE_SERVICE_ACCOUNT_JSON = undefined;
+    }
   });
 });

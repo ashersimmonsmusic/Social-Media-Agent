@@ -9,6 +9,7 @@ import {
   GoogleReauthRequiredError,
 } from "../../modules/oauth/google.service.js";
 import { listVideos, formatVideoList, DriveError } from "../../modules/drive/drive.service.js";
+import { isServiceAccountConfigured, serviceAccountEmail } from "../../modules/oauth/serviceAccount.js";
 import { prepareVideoForReels, formatPreparedVideo } from "../../modules/video/video.service.js";
 import { VideoToolError } from "../../modules/video/ffmpeg.js";
 import type { ReframeMode } from "../../modules/video/reframe.service.js";
@@ -20,6 +21,30 @@ import { commandTrigger } from "./trigger.js";
 
 export function registerDriveCommands(bot: Telegraf) {
   bot.command(commandTrigger("drive"), async (ctx) => {
+    // A service account replaces the consent flow entirely, so none of the
+    // connect/disconnect wording below applies when one is configured.
+    if (isServiceAccountConfigured()) {
+      const email = serviceAccountEmail();
+      await ctx.reply(
+        [
+          "GOOGLE DRIVE",
+          "",
+          "Connected through a service account. Nothing to re-approve — this doesn't expire.",
+          "",
+          email
+            ? `I can see anything shared with:\n${email}`
+            : "I couldn't read the address from GOOGLE_SERVICE_ACCOUNT_JSON — check it's the complete key file.",
+          "",
+          env.GOOGLE_DRIVE_FOLDER_ID
+            ? "Share a folder with that address and I'll read the one you've pointed me at."
+            : "Open your folder in Drive → Share → add that address as a Viewer.",
+          "",
+          "Then /videos to see what's there.",
+        ].join("\n"),
+      );
+      return;
+    }
+
     const connection = await getConnection();
 
     if (connection) {
@@ -28,6 +53,9 @@ export function registerDriveCommands(bot: Telegraf) {
           "GOOGLE DRIVE",
           "",
           `Connected${connection.accountEmail ? ` as ${connection.accountEmail}` : ""}.`,
+          "",
+          "Note: Google expires this every 7 days while your Google app is set to \"Testing\", and I'll tell you " +
+            "when it does. A service account removes that for good — see DRIVE_SETUP.md.",
           env.GOOGLE_DRIVE_FOLDER_ID
             ? "I'm only looking at the one folder you pointed me at."
             : "I can see videos across your whole Drive. Set GOOGLE_DRIVE_FOLDER_ID in Railway to narrow that to one folder.",

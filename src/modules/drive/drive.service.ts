@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { env } from "../../config/env.js";
 import { getAccessToken } from "../oauth/google.service.js";
+import { isServiceAccountConfigured, serviceAccountEmail } from "../oauth/serviceAccount.js";
 
 export interface DriveVideo {
   id: string;
@@ -149,6 +150,20 @@ export function formatDuration(millis?: number): string {
 
 export function formatVideoList(videos: DriveVideo[]): string {
   if (videos.length === 0) {
+    // With a service account this is almost always the folder not being shared
+    // rather than the folder being empty — the API reports both identically.
+    if (isServiceAccountConfigured()) {
+      const email = serviceAccountEmail();
+      return [
+        "I can't see any videos.",
+        "",
+        email
+          ? `If you haven't already, open the folder in Drive, press Share, and add this address as a Viewer:\n${email}`
+          : "Check GOOGLE_SERVICE_ACCOUNT_JSON in Railway — I couldn't read the address to share with.",
+        "",
+        "If you have shared it, then the folder is empty, or the clips are in a subfolder — I only see files sitting directly in it.",
+      ].join("\n");
+    }
     return env.GOOGLE_DRIVE_FOLDER_ID
       ? "No videos in the folder I'm watching. Drop one in and ask again."
       : "No videos found in your Drive.";

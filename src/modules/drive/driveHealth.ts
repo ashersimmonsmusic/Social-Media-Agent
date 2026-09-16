@@ -2,6 +2,7 @@ import type { Telegram } from "telegraf";
 import { logger } from "../../lib/logger.js";
 import { sendPlainMessage } from "../../telegram/notify.js";
 import { getAccessToken, getConnection, GoogleReauthRequiredError } from "../oauth/google.service.js";
+import { isServiceAccountConfigured } from "../oauth/serviceAccount.js";
 
 /**
  * Google expires the whole authorisation seven days after consent while an
@@ -23,6 +24,10 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let warned = false;
 
 export async function checkDriveAccess(telegram: Telegram): Promise<"ok" | "lapsed" | "not-connected"> {
+  // A service account signs its own tokens from a key that does not expire.
+  // There is no seven-day clock to watch and nothing for Asher to re-approve.
+  if (isServiceAccountConfigured()) return "ok";
+
   const connection = await getConnection();
   if (!connection) return "not-connected";
 

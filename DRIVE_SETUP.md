@@ -158,6 +158,61 @@ again any time to check which account it's on.
 
 ---
 
+## The permanent alternative: a service account
+
+Everything above uses *your* Google account, and Google expires that every
+seven days while the app is on Testing. A service account removes that for
+good. It is a robot with its own email address: you share a folder with it
+exactly as you would with a person, and it signs its own tokens from a key
+that never expires.
+
+Nothing to approve, nothing to renew, no consent screen, no publishing status,
+no privacy policy. It can only ever see what you explicitly share with it —
+which is the reach you wanted anyway.
+
+**Takes about five minutes.** Steps 1–3 above (project, Drive API) still apply;
+steps 4–7 become unnecessary.
+
+1. **console.cloud.google.com** → **IAM & Admin** → **Service Accounts** →
+   **Create service account**
+2. Name it `asher-bot` → **Create and continue** → skip the optional
+   permissions → **Done**
+3. Click the account you just made → **Keys** tab → **Add key** →
+   **Create new key** → **JSON** → **Create**
+
+   A `.json` file downloads. **That file is a key** — treat it like a password.
+   It goes into Railway and nowhere else.
+
+4. Open it in a text editor and copy **all** of it, from the first `{` to the
+   last `}`.
+5. Railway → **Variables** → **New Variable**:
+   - Name: `GOOGLE_SERVICE_ACCOUNT_JSON`
+   - Value: the whole contents of that file
+6. Back in the service account page, copy its **email address**. It looks like:
+   ```
+   asher-bot@your-project.iam.gserviceaccount.com
+   ```
+   That's not a secret — it's an address you share a folder with.
+7. In Drive, open your videos folder → **Share** → paste that address → set it
+   to **Viewer** → Send. Untick "Notify people" if you'd rather not email a
+   robot.
+8. Send `/drive` in Telegram. It should say it's connected through a service
+   account.
+
+Once `GOOGLE_SERVICE_ACCOUNT_JSON` is set, the bot uses it and ignores the
+consent flow entirely. You can `/drivedisconnect` the old connection; it makes
+no difference either way.
+
+### If `/videos` is empty afterwards
+
+You almost certainly haven't shared the folder with the service account's
+address, or shared a different folder than the one in
+`GOOGLE_DRIVE_FOLDER_ID`. Drive reports "not shared with me" and "empty"
+identically, so the bot can't tell them apart — it will remind you of the
+address to share with.
+
+---
+
 ## Step 8 — Point it at one folder
 
 Without this the bot can see every video anywhere in your Drive. Narrowing it

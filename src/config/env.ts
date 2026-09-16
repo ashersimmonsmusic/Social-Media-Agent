@@ -95,6 +95,11 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: optionalString(),
   GOOGLE_DRIVE_FOLDER_ID: optionalString(),
 
+  // The whole contents of a service account key file. When set, Drive access
+  // goes through it and the consent flow above is unused — a service account
+  // signs its own tokens, so nothing expires and nothing needs re-approving.
+  GOOGLE_SERVICE_ACCOUNT_JSON: optionalString(),
+
   // Video processing. The source cap exists because ffmpeg works on a real file
   // on the container's ephemeral disk: a 2GB source would fill it and fail the
   // whole app, not just the render.

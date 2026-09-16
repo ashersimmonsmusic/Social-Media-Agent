@@ -4,12 +4,10 @@ import { prisma } from "../../db/prisma.js";
 import { decryptToken, encryptToken } from "../../lib/tokenCrypto.js";
 import { logger } from "../../lib/logger.js";
 import { recordAudit } from "../audit/audit.service.js";
+import { DRIVE_SCOPES } from "./scopes.js";
+import { getServiceAccountToken, isServiceAccountConfigured } from "./serviceAccount.js";
 
-/**
- * Read-only. The bot needs to list and fetch Asher's videos and nothing more —
- * a wider scope would let a mistake here delete his footage.
- */
-export const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly", "openid", "email"];
+export { DRIVE_SCOPES } from "./scopes.js";
 
 /** Refresh this far before actual expiry, so a long operation doesn't die mid-way. */
 const EXPIRY_MARGIN_MS = 2 * 60 * 1000;
@@ -229,6 +227,10 @@ export async function disconnect(): Promise<boolean> {
  * to go through here rather than caching one.
  */
 export async function getAccessToken(): Promise<string> {
+  // A service account needs no approval and never lapses, so it wins wherever
+  // one is configured — there is nothing the consent flow does better.
+  if (isServiceAccountConfigured()) return getServiceAccountToken();
+
   const account = await prisma.oAuthAccount.findFirst({ where: { provider: "GOOGLE", isActive: true } });
   if (!account) throw new GoogleNotConnectedError();
 
