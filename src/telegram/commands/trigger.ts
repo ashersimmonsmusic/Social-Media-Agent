@@ -23,6 +23,7 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "spend", description: "What the AI has cost this month" },
   { command: "connect", description: "Link your Instagram account for posting" },
   { command: "accounts", description: "Which accounts are linked, and recent posts" },
+  { command: "ready", description: "Can I actually post? What's blocking it?" },
   { command: "disconnect", description: "Unlink Instagram so nothing can post" },
   { command: "website", description: "What I can add to your website" },
   { command: "drive", description: "Connect Google Drive so I can see your videos" },

@@ -18,6 +18,7 @@ import {
   SchedulingError,
 } from "../../modules/social/scheduler.service.js";
 import { logger } from "../../lib/logger.js";
+import { checkPostingReadiness, formatReadiness } from "../../modules/social/readiness.js";
 import { commandTrigger } from "./trigger.js";
 
 /** Carried on a SOCIAL_POST approval so the approved action knows what to publish. */
@@ -176,6 +177,11 @@ export function registerSocialCommands(bot: Telegraf) {
         ? "Instagram disconnected. I can't post anywhere until you reconnect."
         : "There was no active Instagram account to disconnect.",
     );
+  });
+
+  bot.command(commandTrigger("ready"), async (ctx) => {
+    await ctx.sendChatAction("typing");
+    await ctx.reply(formatReadiness(await checkPostingReadiness()));
   });
 
   bot.command(commandTrigger("accounts"), async (ctx) => {
