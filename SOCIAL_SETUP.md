@@ -75,11 +75,25 @@ What has to be true instead:
 2. The Instagram account is added under **App Roles → Roles** as an
    **Instagram Tester**:
    `https://developers.facebook.com/apps/<APP-ID>/roles/roles/`
-3. That invitation is **accepted from the Instagram side**, at
-   [instagram.com/accounts/manage_access](https://www.instagram.com/accounts/manage_access/)
-   — or in the app under Settings → Apps and websites → Tester invites. An
-   unaccepted invite looks exactly like a missing permission.
-4. The token is generated *after* accepting.
+3. That invitation is **accepted from the Instagram side**.
+
+   **Nothing is emailed and no link is sent.** The invitation sits inside
+   Instagram until you go and find it, which is why it looks like it never
+   arrived:
+
+   - In the app: profile → **Edit profile** → **Apps and websites** →
+     **Tester invites** → Accept
+   - On the web:
+     [instagram.com/accounts/manage_access](https://www.instagram.com/accounts/manage_access/)
+
+   The Roles page is the check: an invitation shows as **Pending** until it is
+   accepted, then **Active**. An unaccepted invite behaves exactly like a
+   missing permission at publish time.
+
+4. The account is **professional and public**. Tokens are not issued for
+   private profiles, and the failure does not mention privacy.
+5. The token is generated *after* accepting — one minted beforehand does not
+   carry the permission.
 
 Only submit for review if someone other than Asher ever needs to post through
 this app. The submission wants a screencast of the real publishing path — a
