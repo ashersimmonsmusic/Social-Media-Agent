@@ -3,7 +3,8 @@
 Posting access can't be granted from code — you have to create a Meta developer app
 and authorize it against your own account. This is that walkthrough.
 
-Budget real time for it. The app itself takes an hour; **App Review takes days**, and
+Budget real time for it. The app itself takes an hour; App Review takes days but
+**is not needed for posting to your own account** (Step 4), and
 Meta rejects vague submissions. Nothing here is optional — Instagram has no
 posting path that skips review.
 
@@ -58,15 +59,35 @@ Use the Page access token with `/connect`. Meta's own
 ["Access Tokens"](https://developers.facebook.com/docs/facebook-login/guides/access-tokens)
 guide has the exact request shapes, which change more often than this file will.
 
-## Step 4 — App Review
+## Step 4 — App Review (you almost certainly don't need this)
 
-`instagram_content_publish` requires App Review before it works on a live account.
-Submit with a screencast showing your own flow: a draft appearing in Telegram, you
-pressing Approve, the post appearing on your Instagram. Reviewers reject submissions
-that don't show the actual publishing path.
+This step reads as the big blocker and mostly isn't one. **Posting to your own
+Instagram account does not require App Review.**
 
-Until review passes, you can only publish to accounts with a role on the app
-(yours, as the developer). That's enough to test.
+Meta grants every new app *Standard Access*, which works for any account that
+holds a role on the app. Asher is the app's admin posting to his own account, so
+that is already the case — nothing to submit, nothing to wait for. Review exists
+for apps that publish on behalf of *other people's* accounts.
+
+What has to be true instead:
+
+1. The app stays in **Development** mode (its default).
+2. The Instagram account is added under **App Roles → Roles** as an
+   **Instagram Tester**:
+   `https://developers.facebook.com/apps/<APP-ID>/roles/roles/`
+3. That invitation is **accepted from the Instagram side**, at
+   [instagram.com/accounts/manage_access](https://www.instagram.com/accounts/manage_access/)
+   — or in the app under Settings → Apps and websites → Tester invites. An
+   unaccepted invite looks exactly like a missing permission.
+4. The token is generated *after* accepting.
+
+Only submit for review if someone other than Asher ever needs to post through
+this app. The submission wants a screencast of the real publishing path — a
+draft in Telegram, the Approve press, the post appearing — and reviewers reject
+anything that doesn't show it.
+
+Check where the app currently stands at
+`https://developers.facebook.com/apps/<APP-ID>/app-review/permissions/`.
 
 ---
 

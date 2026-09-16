@@ -95,11 +95,12 @@ describe("checkPostingReadiness", () => {
 
 describe("formatReadiness", () => {
   it("always names the blocker it cannot see", async () => {
-    // App Review is granted by Meta and only surfaces as a refusal at publish
-    // time, so a clean list must not read as "nothing can stop this".
+    // The account's role on the Meta app is granted outside this system and
+    // surfaces only as a refusal at publish time, so a clean list must not read
+    // as "nothing can stop this".
     const text = formatReadiness(await checkPostingReadiness());
-    expect(text).toMatch(/instagram_content_publish/);
-    expect(text).toMatch(/App Review/);
+    expect(text).toMatch(/Instagram Tester/);
+    expect(text).toMatch(/manage_access/);
   });
 
   it("counts what is blocking rather than just listing crosses", async () => {

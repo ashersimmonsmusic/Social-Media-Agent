@@ -164,9 +164,10 @@ export function formatReadiness(readiness: Readiness): string {
   // grants the permission, and it only surfaces as a refusal at publish time.
   lines.push(
     "",
-    "One thing I can't check from here: whether Meta has approved instagram_content_publish for your app. " +
-      "Until they have, publishing is refused no matter what the list above says. " +
-      "Check App Review in the Meta developer console.",
+    "One thing I can't check from here: whether your Instagram account holds a role on your Meta app. " +
+      "Posting to your own account needs that rather than App Review — add it as an Instagram Tester under " +
+      "App Roles, accept the invite at instagram.com/accounts/manage_access, then generate the token. " +
+      "An unaccepted invite looks exactly like a missing permission.",
   );
 
   return lines.join("\n");
