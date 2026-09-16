@@ -18,9 +18,18 @@ const EXPIRY_MARGIN_MS = 2 * 60 * 1000;
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 export class GoogleNotConfiguredError extends Error {
-  constructor() {
+  /**
+   * Names the variables that are actually absent, not all three.
+   *
+   * PUBLIC_BASE_URL is shared with Instagram's media links, so a message
+   * implying it needs setting when it is already correct invites someone to
+   * overwrite a working value and break posting while fixing Drive.
+   */
+  constructor(missing: string[]) {
+    const list = missing.length === 1 ? missing[0]! : `${missing.slice(0, -1).join(", ")} and ${missing.at(-1)!}`;
     super(
-      "Google isn't set up yet — GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and PUBLIC_BASE_URL all need to be set in Railway.",
+      `Google isn't set up yet — ${list} ${missing.length === 1 ? "needs" : "need"} setting in Railway. ` +
+        `DRIVE_SETUP.md walks through where ${missing.length === 1 ? "it comes" : "they come"} from.`,
     );
     this.name = "GoogleNotConfiguredError";
   }
@@ -54,8 +63,15 @@ function config() {
   const clientId = env.GOOGLE_CLIENT_ID;
   const clientSecret = env.GOOGLE_CLIENT_SECRET;
   const base = env.PUBLIC_BASE_URL;
-  if (!clientId || !clientSecret || !base) throw new GoogleNotConfiguredError();
-  return { clientId, clientSecret, redirectUri: `${base.replace(/\/$/, "")}/oauth/google/callback` };
+
+  const missing = [
+    !clientId && "GOOGLE_CLIENT_ID",
+    !clientSecret && "GOOGLE_CLIENT_SECRET",
+    !base && "PUBLIC_BASE_URL",
+  ].filter((name): name is string => typeof name === "string");
+  if (missing.length > 0) throw new GoogleNotConfiguredError(missing);
+
+  return { clientId: clientId!, clientSecret: clientSecret!, redirectUri: `${base!.replace(/\/$/, "")}/oauth/google/callback` };
 }
 
 /**

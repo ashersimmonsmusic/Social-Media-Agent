@@ -70,3 +70,28 @@ describe("oauth state", () => {
     expect(verifyState(`${Number(issued) + 1000}.${signature}`)).toBe(false);
   });
 });
+
+describe("GoogleNotConfiguredError", () => {
+  it("names only the variable that is missing", () => {
+    expect(new GoogleNotConfiguredError(["GOOGLE_CLIENT_ID"]).message).toMatch(
+      /GOOGLE_CLIENT_ID needs setting/,
+    );
+  });
+
+  it("does not mention a variable that is already set", () => {
+    // PUBLIC_BASE_URL is shared with Instagram's media links — naming it when
+    // it is fine invites overwriting a working value.
+    const message = new GoogleNotConfiguredError(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]).message;
+    expect(message).not.toMatch(/PUBLIC_BASE_URL/);
+    expect(message).toMatch(/GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET need setting/);
+  });
+
+  it("reads correctly when all three are missing", () => {
+    const message = new GoogleNotConfiguredError([
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "PUBLIC_BASE_URL",
+    ]).message;
+    expect(message).toMatch(/GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and PUBLIC_BASE_URL need setting/);
+  });
+});
