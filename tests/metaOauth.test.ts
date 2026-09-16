@@ -75,6 +75,12 @@ describe("authorisationUrl", () => {
     expect(asked).toContain("pages_show_list");
   });
 
+  it("forces Facebook to ask which Pages again on a retry", () => {
+    // Otherwise a second attempt reuses the first attempt's selection without
+    // showing the screen, so correcting a wrong choice is impossible.
+    expect(new URL(authorisationUrl()).searchParams.get("auth_type")).toBe("rerequest");
+  });
+
   it("names what is missing rather than failing vaguely", () => {
     envState.META_APP_SECRET = undefined;
     expect(() => authorisationUrl()).toThrow(MetaNotConfiguredError);

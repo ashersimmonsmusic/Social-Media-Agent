@@ -90,6 +90,11 @@ export function authorisationUrl(): string {
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", scopes().join(","));
+  // Without this, re-authorising an app Facebook has already seen skips the
+  // page-selection screen entirely and carries the previous choice forward —
+  // so a retry after picking the wrong Page silently repeats the wrong Page,
+  // and looks like the selection was ignored.
+  url.searchParams.set("auth_type", "rerequest");
   url.searchParams.set("state", createState(STATE_NAMESPACE));
   return url.toString();
 }
