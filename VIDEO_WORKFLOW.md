@@ -130,9 +130,9 @@ Automatic scheduling, manual approval. You approve once, it posts three times.
 
 Two switches, both outside this code:
 
-1. **App Review.** Instagram publishing needs `instagram_content_publish`
-   approved on your Meta app. Until it is, publishing fails no matter what the
-   bot does.
+1. **Your Instagram account needs a role on your Meta app.** Add it as an
+   Instagram Tester and accept the invite from inside Instagram. App Review is
+   not needed to post to your own account — see `SOCIAL_SETUP.md`.
 2. **`DRY_RUN=false`** in Railway. It defaults to `true`, which means everything
    works end to end and records what it *would* have posted without posting it.
 

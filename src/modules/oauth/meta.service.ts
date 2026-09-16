@@ -19,10 +19,17 @@ import { createState, verifyState } from "./state.js";
 
 const STATE_NAMESPACE = "meta-oauth";
 
-/** Publishing needs the first two; the Page lookup needs the rest. */
+/**
+ * Publishing needs the first two; the Page lookup needs the rest.
+ *
+ * `instagram_basic` and `instagram_content_publish` were deprecated on
+ * 27 January 2025 and are now rejected outright — the login fails before it
+ * starts, with "Invalid Scopes" and no indication that a rename is what
+ * happened. The `instagram_business_*` names replace them.
+ */
 const SCOPES = [
-  "instagram_basic",
-  "instagram_content_publish",
+  "instagram_business_basic",
+  "instagram_business_content_publish",
   "pages_show_list",
   "pages_read_engagement",
   "business_management",

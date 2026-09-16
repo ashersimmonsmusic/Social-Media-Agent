@@ -55,9 +55,18 @@ beforeEach(() => {
 describe("authorisationUrl", () => {
   it("asks for publishing permission and sends Meta back to our callback", () => {
     const url = new URL(authorisationUrl());
-    expect(url.searchParams.get("scope")).toContain("instagram_content_publish");
+    expect(url.searchParams.get("scope")).toContain("instagram_business_content_publish");
     expect(url.searchParams.get("redirect_uri")).toBe("https://app.up.railway.app/oauth/meta/callback");
     expect(url.searchParams.get("state")).toBeTruthy();
+  });
+
+  it("does not ask for the scopes Meta retired in January 2025", () => {
+    // Asking for either fails the login outright with "Invalid Scopes", before
+    // the user ever sees a consent screen.
+    const scope = new URL(authorisationUrl()).searchParams.get("scope") ?? "";
+    const asked = scope.split(",");
+    expect(asked).not.toContain("instagram_basic");
+    expect(asked).not.toContain("instagram_content_publish");
   });
 
   it("names what is missing rather than failing vaguely", () => {

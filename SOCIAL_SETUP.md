@@ -36,7 +36,7 @@ will work — start there.
 In the Graph API Explorer (<https://developers.facebook.com/tools/explorer>):
 
 1. Select your app, then generate a user token. For this step you only need
-   `pages_show_list` and `instagram_basic` — `instagram_content_publish` is for
+   `pages_show_list` and `instagram_business_basic` — `instagram_business_content_publish` is for
    posting later and is gated behind App Review, so don't get stuck if it isn't
    offered yet. It only appears once the Instagram product is added to the app.
 2. Query `me/accounts` to find your Page, and copy its `id`.
@@ -84,6 +84,13 @@ guide has the request shapes, which change more often than this file will.
 
 **The `me/accounts` response contains a publishing token for every Page on the
 account.** Read what you need off the screen; don't paste the reply anywhere.
+
+> **Permission names changed on 27 January 2025.** `instagram_basic` and
+> `instagram_content_publish` were retired and are now rejected outright — a
+> login asking for either fails with "Invalid Scopes" before any consent screen
+> appears. The current names are `instagram_business_basic` and
+> `instagram_business_content_publish`. Older guides everywhere still show the
+> old ones.
 
 ## Step 4 — App Review (you almost certainly don't need this)
 
@@ -210,5 +217,5 @@ approved post is a real, public post.**
 - *"no text-only post"* — no image was given. Name a photo from your library, or
   pass a public image URL.
 - *Permission errors* — App Review hasn't passed, or the token lacks
-  `instagram_content_publish`.
+  `instagram_business_content_publish`.
 - *Token expired* — reconnect with a fresh Page token via `/connect`.
