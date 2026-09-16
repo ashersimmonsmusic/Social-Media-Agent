@@ -84,12 +84,17 @@ While the status is Testing, Google expires the whole authorisation **7 days
 after you approve it** — the bot loses access every week for no visible
 reason. Publishing removes that.
 
-**If Google asks you to submit for verification:** don't. `drive.readonly` is
-a scope Google treats as sensitive, so it may push you toward a review process
-built for public apps with thousands of users. You are one person reading your
-own Drive. Close it and stay on Testing — the cost is running `/drive` again
-every week or so, which takes about fifteen seconds. The bot will tell you
-when it needs doing.
+**Publishing is probably not worth it, and you can skip this step.** To
+publish, Google wants a privacy policy and terms of service hosted on a domain
+you have verified in Search Console, linked from the Branding page — and
+because `drive.readonly` is a restricted scope, it may still require a full
+review afterwards. That process exists for apps with thousands of users.
+
+Staying on Testing costs you one `/drive` every seven days, which takes about
+fifteen seconds. **The bot checks its own Drive access four times a day and
+messages you when it lapses**, so you are told rather than finding out when a
+clip fails to appear. That is the better trade for one person reading their
+own Drive.
 
 Either way the approval page in Step 7 warns that "Google hasn't verified this
 app". That's expected. It's your app.

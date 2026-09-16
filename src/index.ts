@@ -7,6 +7,7 @@ import { createBot } from "./telegram/bot.js";
 import { COMMANDS } from "./telegram/commands/trigger.js";
 import { startScheduler, stopScheduler } from "./modules/social/scheduler.service.js";
 import { runPolling } from "./telegram/polling.js";
+import { startDriveWatch, stopDriveWatch } from "./modules/drive/driveHealth.js";
 
 async function main() {
   const app = express();
@@ -51,6 +52,7 @@ async function main() {
   }
 
   startScheduler();
+  startDriveWatch(bot.telegram);
 
   app.listen(env.PORT, () => {
     logger.info("http.listening", { port: env.PORT, dryRun: env.DRY_RUN });
@@ -58,10 +60,12 @@ async function main() {
 
   process.once("SIGINT", () => {
     stopScheduler();
+    stopDriveWatch();
     bot.stop("SIGINT");
   });
   process.once("SIGTERM", () => {
     stopScheduler();
+    stopDriveWatch();
     bot.stop("SIGTERM");
   });
 }
