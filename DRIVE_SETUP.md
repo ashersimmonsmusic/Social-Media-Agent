@@ -188,11 +188,20 @@ steps 4–7 become unnecessary.
 5. Railway → **Variables** → **New Variable**:
    - Name: `GOOGLE_SERVICE_ACCOUNT_JSON`
    - Value: the whole contents of that file
-6. Back in the service account page, copy its **email address**. It looks like:
-   ```
-   asher-bot@your-project.iam.gserviceaccount.com
-   ```
-   That's not a secret — it's an address you share a folder with.
+6. Back in the service account page, copy its **email address** — the value in
+   the **Email** column, which contains your own project's id and is unique to
+   you. It has the shape `NAME@PROJECT-ID.iam.gserviceaccount.com`.
+
+   **Copy the real one from the console or from the `client_email` line of the
+   key file.** Do not type it out from the shape above — an address that does
+   not exist is refused by Drive with "they do not have a Google Account",
+   which reads like the service account is broken when it is only misspelled.
+
+   Easiest way to get it exactly right: once `GOOGLE_SERVICE_ACCOUNT_JSON` is
+   set in Railway, send `/drive` in Telegram and the bot prints the address for
+   you to copy.
+
+   It is not a secret — it's an address you share a folder with.
 7. In Drive, open your videos folder → **Share** → paste that address → set it
    to **Viewer** → Send. Untick "Notify people" if you'd rather not email a
    robot.
@@ -202,6 +211,12 @@ steps 4–7 become unnecessary.
 Once `GOOGLE_SERVICE_ACCOUNT_JSON` is set, the bot uses it and ignores the
 consent flow entirely. You can `/drivedisconnect` the old connection; it makes
 no difference either way.
+
+### "They do not have a Google Account"
+
+Drive is telling you that address does not exist. Either the service account
+hasn't been created yet, or the address has a typo — most often the project id
+left as a placeholder. Send `/drive` to get the exact string.
 
 ### If `/videos` is empty afterwards
 
