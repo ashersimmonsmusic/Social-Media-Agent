@@ -69,6 +69,10 @@ const envSchema = z.object({
   // Set these and /connect becomes a link to tap rather than a token to paste.
   META_APP_ID: optionalString(),
   META_APP_SECRET: optionalString(),
+  // Comma-separated. Only needed when Meta answers the login with "Invalid
+  // Scopes" — which names an app offers depends on how it was set up, and its
+  // own Permissions screen is where the real list is.
+  META_OAUTH_SCOPES: optionalString(),
 
   // Website. Content goes into Sanity, which the Next.js site renders from;
   // anything needing real code goes to GitHub as an issue instead.

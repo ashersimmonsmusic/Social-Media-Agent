@@ -20,20 +20,35 @@ import { createState, verifyState } from "./state.js";
 const STATE_NAMESPACE = "meta-oauth";
 
 /**
- * Publishing needs the first two; the Page lookup needs the rest.
+ * What the login asks Meta for.
  *
- * `instagram_basic` and `instagram_content_publish` were deprecated on
- * 27 January 2025 and are now rejected outright — the login fails before it
- * starts, with "Invalid Scopes" and no indication that a rename is what
- * happened. The `instagram_business_*` names replace them.
+ * Meta rejects the whole login with "Invalid Scopes" if it is asked for a
+ * permission the app has not been configured with — and which names an app
+ * offers depends on when it was created and which use case it was set up under.
+ * `instagram_basic`/`instagram_content_publish` belong to the older Instagram
+ * API with Facebook Login; `instagram_business_basic`/
+ * `instagram_business_content_publish` to the newer Instagram Login path. An app
+ * accepts one pair, not both, and the error names only what it refused.
+ *
+ * So this is overridable from Railway. Finding the right set otherwise means a
+ * deploy per guess, and the app's own Permissions screen is the only place the
+ * answer is actually written down.
  */
-const SCOPES = [
-  "instagram_business_basic",
-  "instagram_business_content_publish",
+const DEFAULT_SCOPES = [
+  "instagram_basic",
+  "instagram_content_publish",
   "pages_show_list",
   "pages_read_engagement",
-  "business_management",
 ];
+
+export function scopes(): string[] {
+  const configured = env.META_OAUTH_SCOPES;
+  if (!configured) return DEFAULT_SCOPES;
+  return configured
+    .split(",")
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+}
 
 export class MetaNotConfiguredError extends Error {
   constructor(missing: string[]) {
@@ -74,7 +89,7 @@ export function authorisationUrl(): string {
   url.searchParams.set("client_id", appId);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", SCOPES.join(","));
+  url.searchParams.set("scope", scopes().join(","));
   url.searchParams.set("state", createState(STATE_NAMESPACE));
   return url.toString();
 }

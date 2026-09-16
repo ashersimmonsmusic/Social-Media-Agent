@@ -85,12 +85,20 @@ guide has the request shapes, which change more often than this file will.
 **The `me/accounts` response contains a publishing token for every Page on the
 account.** Read what you need off the screen; don't paste the reply anywhere.
 
-> **Permission names changed on 27 January 2025.** `instagram_basic` and
-> `instagram_content_publish` were retired and are now rejected outright — a
-> login asking for either fails with "Invalid Scopes" before any consent screen
-> appears. The current names are `instagram_business_basic` and
-> `instagram_business_content_publish`. Older guides everywhere still show the
-> old ones.
+> **"Invalid Scopes" means the app hasn't been given that permission.** Meta
+> refuses the whole login before any consent screen appears, and names only what
+> it refused.
+>
+> There are two sets of names in circulation, and an app accepts one or the
+> other depending on how it was set up: `instagram_basic` /
+> `instagram_content_publish` on the older Instagram API with Facebook Login,
+> and `instagram_business_basic` / `instagram_business_content_publish` on the
+> newer Instagram Login path. Guides show both, usually without saying which.
+>
+> Don't guess — the app's own **Use cases → Instagram → Customise →
+> Permissions** screen lists the names it has. Set `META_OAUTH_SCOPES` in
+> Railway to match, comma separated, and add any missing permission on that same
+> screen.
 
 ## Step 4 — App Review (you almost certainly don't need this)
 

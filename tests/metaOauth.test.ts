@@ -55,18 +55,24 @@ beforeEach(() => {
 describe("authorisationUrl", () => {
   it("asks for publishing permission and sends Meta back to our callback", () => {
     const url = new URL(authorisationUrl());
-    expect(url.searchParams.get("scope")).toContain("instagram_business_content_publish");
+    expect(url.searchParams.get("scope")).toContain("instagram_content_publish");
     expect(url.searchParams.get("redirect_uri")).toBe("https://app.up.railway.app/oauth/meta/callback");
     expect(url.searchParams.get("state")).toBeTruthy();
   });
 
-  it("does not ask for the scopes Meta retired in January 2025", () => {
-    // Asking for either fails the login outright with "Invalid Scopes", before
-    // the user ever sees a consent screen.
-    const scope = new URL(authorisationUrl()).searchParams.get("scope") ?? "";
-    const asked = scope.split(",");
-    expect(asked).not.toContain("instagram_basic");
-    expect(asked).not.toContain("instagram_content_publish");
+  it("can be pointed at whatever permissions the app actually offers", () => {
+    // Which names are valid depends on how the app was set up, and getting it
+    // wrong fails the login before any consent screen. Changing it must not
+    // need a deploy.
+    envState.META_OAUTH_SCOPES = "instagram_business_basic, instagram_business_content_publish ,pages_show_list";
+    const asked = (new URL(authorisationUrl()).searchParams.get("scope") ?? "").split(",");
+    expect(asked).toEqual(["instagram_business_basic", "instagram_business_content_publish", "pages_show_list"]);
+  });
+
+  it("falls back to the Facebook Login set when nothing is configured", () => {
+    const asked = (new URL(authorisationUrl()).searchParams.get("scope") ?? "").split(",");
+    expect(asked).toContain("instagram_content_publish");
+    expect(asked).toContain("pages_show_list");
   });
 
   it("names what is missing rather than failing vaguely", () => {
