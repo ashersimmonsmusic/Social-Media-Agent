@@ -157,12 +157,24 @@ export async function completeConnection(code: string): Promise<{ username?: str
   const withInstagram = pages.find((page) => page.instagram_business_account?.id);
 
   if (!withInstagram) {
+    if (pages.length === 0) {
+      throw new MetaConnectError(
+        "That login granted access to no Pages at all. Run /connect again and make sure the Page your Instagram " +
+          "account sits behind is ticked — and that you picked the business portfolio it belongs to.",
+      );
+    }
+
+    // Naming them is the whole diagnosis: if the right Page isn't in this list
+    // it was never granted, and if it is, the Instagram link is what's missing.
+    // Without the names both look identical from here.
+    const names = pages.map((page) => `• ${page.name ?? page.id}`).join("\n");
     throw new MetaConnectError(
-      pages.length === 0
-        ? "That account manages no Pages, so there's no Instagram account behind one. Check you approved the right " +
-          "business portfolio when Meta asked."
-        : `Found ${pages.length} Page(s), but none with an Instagram professional account attached. ` +
-          `Link your Instagram account to your Page in Meta Business Suite, then try again.`,
+      `I got access to ${pages.length} Page(s), but none has an Instagram professional account attached:\n\n` +
+        `${names}\n\n` +
+        `If the Page you post from ISN'T in that list, run /connect again and tick it when Meta asks which Pages ` +
+        `to allow.\n\n` +
+        `If it IS in the list, then Instagram isn't linked to it. In Meta Business Suite go to Settings → ` +
+        `Accounts → Instagram accounts, and connect your account to that Page.`,
     );
   }
 

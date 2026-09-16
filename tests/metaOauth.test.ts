@@ -127,14 +127,33 @@ describe("completeConnection", () => {
     expect(connected).toHaveLength(0);
   });
 
-  it("says what to fix when a Page has no Instagram account attached", async () => {
+  it("names the Pages it got, since that is the whole diagnosis", async () => {
+    // Whether the right Page was never granted, or was granted but has no
+    // Instagram linked, look identical without the names.
     scriptGraph([
       { access_token: "short" },
       { access_token: "long" },
-      { data: [{ id: "p1", name: "Some Page", access_token: "t" }] },
+      {
+        data: [
+          { id: "p1", name: "Some Old Page", access_token: "t1" },
+          { id: "p2", name: "A Different Project", access_token: "t2" },
+        ],
+      },
     ]);
 
-    await expect(completeConnection("code")).rejects.toThrow(/Meta Business Suite/);
+    const error = await completeConnection("code").catch((thrown: unknown) => thrown);
+    const message = (error as Error).message;
+    expect(message).toContain("Some Old Page");
+    expect(message).toContain("A Different Project");
+    expect(message).toMatch(/ISN'T in that list/);
+    expect(message).toMatch(/Meta Business Suite/);
+  });
+
+  it("falls back to an id when a Page has no name", async () => {
+    scriptGraph([{ access_token: "short" }, { access_token: "long" }, { data: [{ id: "p1", access_token: "t" }] }]);
+
+    const error = await completeConnection("code").catch((thrown: unknown) => thrown);
+    expect((error as Error).message).toContain("p1");
   });
 
   it("passes Meta's own refusal through instead of a generic failure", async () => {
