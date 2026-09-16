@@ -21,6 +21,23 @@ export function sanitizeModelId(raw: string, fallback: string): string {
   return cleaned || fallback;
 }
 
+/**
+ * A variable that is present but blank is not configured.
+ *
+ * Railway creates one the moment you add a name and save without typing a
+ * value, and an empty string then satisfies `z.string()` — so the app treats it
+ * as set, and whatever depended on it fails somewhere far away with a message
+ * about something else. Blank and absent mean the same thing here, and a value
+ * that is only whitespace is a mis-paste, not a setting.
+ */
+const blankToUndefined = (value: unknown) =>
+  typeof value === "string" && value.trim() === "" ? undefined : value;
+
+const optionalString = () => z.preprocess(blankToUndefined, z.string().optional());
+
+/** Same, for a variable with a default — blank should fall back, not override. */
+const stringWithDefault = (fallback: string) => z.preprocess(blankToUndefined, z.string().default(fallback));
+
 const modelId = (fallback: string) =>
   z
     .string()
@@ -36,8 +53,8 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
   TELEGRAM_ALLOWED_CHAT_ID: z.string().min(1, "TELEGRAM_ALLOWED_CHAT_ID is required"),
   TELEGRAM_USE_WEBHOOK: boolFromString,
-  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
-  PUBLIC_BASE_URL: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: optionalString(),
+  PUBLIC_BASE_URL: optionalString(),
 
   ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
   AI_MODEL_STRATEGY: modelId("claude-opus-5"),
@@ -47,36 +64,36 @@ const envSchema = z.object({
 
   // Social publishing. Optional so the app still boots before any account is
   // connected; connecting one without SOCIAL_TOKEN_KEY fails with a clear error.
-  SOCIAL_TOKEN_KEY: z.string().optional(),
-  META_GRAPH_API_VERSION: z.string().default("v21.0"),
+  SOCIAL_TOKEN_KEY: optionalString(),
+  META_GRAPH_API_VERSION: stringWithDefault("v21.0"),
 
   // Website. Content goes into Sanity, which the Next.js site renders from;
   // anything needing real code goes to GitHub as an issue instead.
-  SANITY_PROJECT_ID: z.string().optional(),
-  SANITY_DATASET: z.string().default("production"),
-  SANITY_API_VERSION: z.string().default("2021-06-07"),
-  SANITY_WRITE_TOKEN: z.string().optional(),
-  GITHUB_TOKEN: z.string().optional(),
-  WEBSITE_REPO: z.string().default("ashersimmonsmusic/ashersimmonsmusic.com"),
+  SANITY_PROJECT_ID: optionalString(),
+  SANITY_DATASET: stringWithDefault("production"),
+  SANITY_API_VERSION: stringWithDefault("2021-06-07"),
+  SANITY_WRITE_TOKEN: optionalString(),
+  GITHUB_TOKEN: optionalString(),
+  WEBSITE_REPO: stringWithDefault("ashersimmonsmusic/ashersimmonsmusic.com"),
 
   // Subscriber and sales figures. The service role key is required, not the
   // anon key: newsletter_subscribers is insert-only under RLS, so an anon key
   // reads an empty list rather than erroring.
-  SUPABASE_URL: z.string().optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+  SUPABASE_URL: optionalString(),
+  SUPABASE_SERVICE_ROLE_KEY: optionalString(),
 
   // Newsletter. The unsubscribe secret must match the website's copy, or every
   // unsubscribe link silently fails to verify — worse than having none.
-  RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().default("Asher Simmons Music <hello@ashersimmonsmusic.com>"),
-  NEWSLETTER_UNSUBSCRIBE_SECRET: z.string().optional(),
-  WEBSITE_URL: z.string().default("https://www.ashersimmonsmusic.com"),
+  RESEND_API_KEY: optionalString(),
+  RESEND_FROM_EMAIL: stringWithDefault("Asher Simmons Music <hello@ashersimmonsmusic.com>"),
+  NEWSLETTER_UNSUBSCRIBE_SECRET: optionalString(),
+  WEBSITE_URL: stringWithDefault("https://www.ashersimmonsmusic.com"),
 
   // Google Drive. Read-only: the bot lists and fetches video, nothing more.
   // Restricting to one folder keeps its reach to what Asher puts there.
-  GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
+  GOOGLE_CLIENT_ID: optionalString(),
+  GOOGLE_CLIENT_SECRET: optionalString(),
+  GOOGLE_DRIVE_FOLDER_ID: optionalString(),
 
   // Video processing. The source cap exists because ffmpeg works on a real file
   // on the container's ephemeral disk: a 2GB source would fill it and fail the
@@ -84,7 +101,7 @@ const envSchema = z.object({
   VIDEO_MAX_SOURCE_MB: z.coerce.number().positive().default(300),
 
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
-  STORAGE_LOCAL_PATH: z.string().default("./uploads"),
+  STORAGE_LOCAL_PATH: stringWithDefault("./uploads"),
 
   DRY_RUN: boolFromString,
   AI_MONTHLY_BUDGET_USD: z.coerce.number().default(50),
