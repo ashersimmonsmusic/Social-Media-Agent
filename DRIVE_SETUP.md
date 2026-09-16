@@ -76,15 +76,23 @@ This is the page you'll see when you approve access.
 
 ### Then do this, or you'll be reconnecting every week
 
-Back on the **OAuth consent screen** page there's a **Publishing status**,
-currently **Testing**. Click **PUBLISH APP** and confirm.
+Google has moved this, and it is not on the screen you just finished. Go to
+**Google Auth Platform** → **Audience** in the left menu. Near the top is
+**Publishing status: Testing**, with a **Publish app** button. Click it.
 
-Google gives apps in Testing a permission that **expires after 7 days**.
-Publishing makes it last indefinitely. You don't need Google to verify
-anything — you're the only user.
+While the status is Testing, Google expires the whole authorisation **7 days
+after you approve it** — the bot loses access every week for no visible
+reason. Publishing removes that.
 
-Because it's unverified, the approval page in Step 7 will warn you that
-"Google hasn't verified this app". That's expected. It's your app.
+**If Google asks you to submit for verification:** don't. `drive.readonly` is
+a scope Google treats as sensitive, so it may push you toward a review process
+built for public apps with thousands of users. You are one person reading your
+own Drive. Close it and stay on Testing — the cost is running `/drive` again
+every week or so, which takes about fifteen seconds. The bot will tell you
+when it needs doing.
+
+Either way the approval page in Step 7 warns that "Google hasn't verified this
+app". That's expected. It's your app.
 
 ---
 
