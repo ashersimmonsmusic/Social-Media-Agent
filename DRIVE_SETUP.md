@@ -262,8 +262,8 @@ trailing slash or `http` instead of `https`.
 **`/videos` comes back empty** —
 - The folder belongs to a different Google account than the one you connected.
   `/drive` tells you which account it's on.
-- Your clips are in a *subfolder*. The bot reads files sitting directly in the
-  folder, not nested inside it. Keep it flat.
+- The folder is genuinely empty. Subfolders are fine — the bot looks inside
+  them too, six levels deep.
 - The folder ID has part of the URL attached. It's only the bit after
   `/folders/`, nothing else.
 

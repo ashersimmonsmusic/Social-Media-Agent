@@ -93,3 +93,103 @@ describe("formatting", () => {
     expect(formatVideoList([])).toMatch(/no videos/i);
   });
 });
+
+describe("listVideos inside a folder tree", () => {
+  /**
+   * Replays Drive's responses in call order and records each query, so the
+   * walk can be asserted without a network.
+   */
+  function scriptDrive(responses: unknown[]) {
+    const queries: string[] = [];
+    let index = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      queries.push(new URL(String(input)).searchParams.get("q") ?? "");
+      const body = responses[Math.min(index, responses.length - 1)];
+      index += 1;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    return queries;
+  }
+
+  const video = (id: string, created: string) => ({
+    id,
+    name: `${id}.mp4`,
+    mimeType: "video/mp4",
+    size: "1048576",
+    createdTime: created,
+    videoMediaMetadata: { durationMillis: "5000", width: 1920, height: 1080 },
+  });
+
+  beforeEach(() => {
+    envState.GOOGLE_DRIVE_FOLDER_ID = "root-folder";
+    vi.restoreAllMocks();
+  });
+
+  it("finds videos nested in subfolders, not just loose ones", async () => {
+    const queries = scriptDrive([
+      { files: [{ id: "sub-a" }] }, // depth 1 under root
+      { files: [] }, //               depth 2 under sub-a
+      { files: [video("deep", "2026-09-10T10:00:00Z")] },
+    ]);
+
+    const videos = await listVideos(10);
+
+    expect(videos.map((v) => v.id)).toEqual(["deep"]);
+    // Both folders are asked about together, in one query.
+    expect(queries.at(-1)).toContain("'root-folder' in parents");
+    expect(queries.at(-1)).toContain("'sub-a' in parents");
+  });
+
+  it("returns newest first across separate folders", async () => {
+    const queries = scriptDrive([
+      { files: [] },
+      { files: [video("old", "2026-01-01T00:00:00Z"), video("new", "2026-09-01T00:00:00Z")] },
+    ]);
+
+    const videos = await listVideos(10);
+
+    expect(videos.map((v) => v.id)).toEqual(["new", "old"]);
+    expect(queries).toHaveLength(2);
+  });
+
+  it("lists a file once even when it sits in two folders", async () => {
+    scriptDrive([
+      { files: [] },
+      { files: [video("dup", "2026-05-05T00:00:00Z"), video("dup", "2026-05-05T00:00:00Z")] },
+    ]);
+
+    expect(await listVideos(10)).toHaveLength(1);
+  });
+
+  it("honours the limit after merging folders", async () => {
+    scriptDrive([
+      { files: [] },
+      {
+        files: [
+          video("a", "2026-09-03T00:00:00Z"),
+          video("b", "2026-09-02T00:00:00Z"),
+          video("c", "2026-09-01T00:00:00Z"),
+        ],
+      },
+    ]);
+
+    expect((await listVideos(2)).map((v) => v.id)).toEqual(["a", "b"]);
+  });
+
+  it("stops rather than looping when a folder is its own ancestor", async () => {
+    // Drive allows a folder in two places; a naive walk would never finish.
+    scriptDrive([{ files: [{ id: "root-folder" }] }, { files: [] }]);
+
+    await expect(listVideos(10)).resolves.toBeDefined();
+  });
+
+  it("does not walk a tree at all when no folder is configured", async () => {
+    envState.GOOGLE_DRIVE_FOLDER_ID = undefined;
+    const queries = scriptDrive([{ files: [video("any", "2026-09-01T00:00:00Z")] }]);
+
+    await listVideos(10);
+
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).not.toContain("in parents");
+  });
+});

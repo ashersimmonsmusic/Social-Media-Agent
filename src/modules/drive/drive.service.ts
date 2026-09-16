@@ -62,27 +62,108 @@ function toVideo(file: DriveFileResponse): DriveVideo {
 
 const FILE_FIELDS = "id,name,mimeType,size,createdTime,videoMediaMetadata(durationMillis,width,height)";
 
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
 /**
- * Lists videos, newest first. Restricted to a single folder when
- * GOOGLE_DRIVE_FOLDER_ID is set, which keeps the bot's reach to a folder Asher
- * chooses rather than his entire Drive.
+ * Drive has no recursive query — `'x' in parents` matches direct children only.
+ * So the tree is walked instead, with limits: nobody organises footage sixty
+ * folders deep, and an unbounded walk on a large Drive is a lot of API calls
+ * against a quota shared with everything else the bot does.
+ */
+const MAX_FOLDER_DEPTH = 6;
+const MAX_FOLDERS = 150;
+/** Drive rejects an over-long query, so parents are asked for in batches. */
+const PARENTS_PER_QUERY = 25;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Every folder inside `rootId`, including itself.
+ *
+ * Asher files things the way anyone does — a folder per shoot, a folder per
+ * month — and telling him to keep it flat instead was solving this in the wrong
+ * place.
+ */
+export async function collectFolderIds(rootId: string): Promise<string[]> {
+  const found = [rootId];
+  let frontier = [rootId];
+
+  for (let depth = 0; depth < MAX_FOLDER_DEPTH && frontier.length > 0; depth += 1) {
+    const next: string[] = [];
+
+    for (const batch of chunk(frontier, PARENTS_PER_QUERY)) {
+      const parents = batch.map((id) => `'${id}' in parents`).join(" or ");
+      const response = await driveRequest("files", {
+        q: `mimeType = '${FOLDER_MIME}' and trashed = false and (${parents})`,
+        pageSize: "100",
+        fields: "files(id)",
+        supportsAllDrives: "true",
+        includeItemsFromAllDrives: "true",
+      });
+      const json = (await response.json()) as { files?: { id: string }[] };
+      for (const folder of json.files ?? []) {
+        if (found.includes(folder.id)) continue; // a folder can have two parents
+        found.push(folder.id);
+        next.push(folder.id);
+        if (found.length >= MAX_FOLDERS) return found;
+      }
+    }
+    frontier = next;
+  }
+
+  return found;
+}
+
+/**
+ * Lists videos, newest first.
+ *
+ * With GOOGLE_DRIVE_FOLDER_ID set this covers the folder and everything nested
+ * inside it; without it, every video the account can see.
  */
 export async function listVideos(limit = 20): Promise<DriveVideo[]> {
-  const clauses = ["mimeType contains 'video/'", "trashed = false"];
-  if (env.GOOGLE_DRIVE_FOLDER_ID) clauses.push(`'${env.GOOGLE_DRIVE_FOLDER_ID}' in parents`);
+  const pageSize = String(Math.min(Math.max(limit, 1), 100));
+  const base = ["mimeType contains 'video/'", "trashed = false"];
 
-  const response = await driveRequest("files", {
-    q: clauses.join(" and "),
-    orderBy: "createdTime desc",
-    pageSize: String(Math.min(limit, 100)),
-    fields: `files(${FILE_FIELDS})`,
-    // Without these, files in a Shared Drive are simply invisible.
-    supportsAllDrives: "true",
-    includeItemsFromAllDrives: "true",
-  });
+  if (!env.GOOGLE_DRIVE_FOLDER_ID) {
+    const response = await driveRequest("files", {
+      q: base.join(" and "),
+      orderBy: "createdTime desc",
+      pageSize,
+      fields: `files(${FILE_FIELDS})`,
+      // Without these, files in a Shared Drive are simply invisible.
+      supportsAllDrives: "true",
+      includeItemsFromAllDrives: "true",
+    });
+    const json = (await response.json()) as { files?: DriveFileResponse[] };
+    return (json.files ?? []).map(toVideo);
+  }
 
-  const json = (await response.json()) as { files?: DriveFileResponse[] };
-  return (json.files ?? []).map(toVideo);
+  const folderIds = await collectFolderIds(env.GOOGLE_DRIVE_FOLDER_ID);
+  const collected = new Map<string, DriveVideo>();
+
+  for (const batch of chunk(folderIds, PARENTS_PER_QUERY)) {
+    const parents = batch.map((id) => `'${id}' in parents`).join(" or ");
+    const response = await driveRequest("files", {
+      q: `${base.join(" and ")} and (${parents})`,
+      orderBy: "createdTime desc",
+      pageSize,
+      fields: `files(${FILE_FIELDS})`,
+      supportsAllDrives: "true",
+      includeItemsFromAllDrives: "true",
+    });
+    const json = (await response.json()) as { files?: DriveFileResponse[] };
+    // Keyed by id because a file living in two folders would otherwise appear twice.
+    for (const file of json.files ?? []) collected.set(file.id, toVideo(file));
+  }
+
+  // Each batch was sorted on its own, so the merged set needs sorting again.
+  return [...collected.values()]
+    .sort((a, b) => b.createdTime.localeCompare(a.createdTime))
+    .slice(0, limit);
 }
 
 export async function getVideo(fileId: string): Promise<DriveVideo> {
@@ -161,7 +242,7 @@ export function formatVideoList(videos: DriveVideo[]): string {
           ? `If you haven't already, open the folder in Drive, press Share, and add this address as a Viewer:\n${email}`
           : "Check GOOGLE_SERVICE_ACCOUNT_JSON in Railway — I couldn't read the address to share with.",
         "",
-        "If you have shared it, then the folder is empty, or the clips are in a subfolder — I only see files sitting directly in it.",
+        "If you have shared it, then the folder is empty. Subfolders are fine — I look inside those too.",
       ].join("\n");
     }
     return env.GOOGLE_DRIVE_FOLDER_ID

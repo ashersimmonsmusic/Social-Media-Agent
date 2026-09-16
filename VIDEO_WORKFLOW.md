@@ -82,8 +82,9 @@ Say these out loud now so they're not a surprise later:
 
 ## The weekly routine
 
-**Through the week — capture, don't edit.** Clips go into the Drive folder. Don't
-tidy them, don't rename them, don't decide whether they're any good. That
+**Through the week — capture, don't edit.** Clips go into the Drive folder —
+subfolders are fine, the bot looks inside them. Don't tidy them, don't rename
+them, don't decide whether they're any good. That
 decision is for later; deciding now is what stops people filming.
 
 **Once a week, 30 minutes:**
