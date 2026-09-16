@@ -66,6 +66,9 @@ const envSchema = z.object({
   // connected; connecting one without SOCIAL_TOKEN_KEY fails with a clear error.
   SOCIAL_TOKEN_KEY: optionalString(),
   META_GRAPH_API_VERSION: stringWithDefault("v21.0"),
+  // Set these and /connect becomes a link to tap rather than a token to paste.
+  META_APP_ID: optionalString(),
+  META_APP_SECRET: optionalString(),
 
   // Website. Content goes into Sanity, which the Next.js site renders from;
   // anything needing real code goes to GitHub as an issue instead.
