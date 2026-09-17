@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 // under test here runs on readings that are supplied directly, so neither the
 // model nor the environment is needed.
 vi.mock("../src/config/env.js", () => ({ env: {} }));
+vi.mock("../src/lib/logger.js", () => ({
+  logger: { info: () => {}, warn: () => {}, error: () => {} },
+}));
 vi.mock("../src/ai/AIService.js", () => ({ aiService: { generate: async () => ({ text: "{}" }) } }));
 
-const { evenise, verticalSliceWidth, cropOffsetFor, renderArgs, REELS_MAX_SECONDS } = await import(
-  "../src/modules/video/ffmpeg.js"
-);
+const { evenise, verticalSliceWidth, cropOffsetFor, renderArgs, REELS_MAX_SECONDS, renderTimeoutFor, workRoot } =
+  await import("../src/modules/video/ffmpeg.js");
 const { parseFrameReadings, planFromReadings, isAlreadyVertical } = await import(
   "../src/modules/video/reframe.service.js"
 );
@@ -180,5 +182,36 @@ describe("renderArgs", () => {
     const nasty = "my clip; rm -rf /.mp4";
     const args = renderArgs(nasty, "out.mp4", { strategy: "blur" }, landscape);
     expect(args).toContain(nasty);
+  });
+});
+
+describe("handling large sources", () => {
+  it("gives a big file proportionally longer before calling it hung", () => {
+    // The timeout is there to catch a hang, not to cap a legitimate render —
+    // a fixed ceiling would kill exactly the large jobs the limit allows.
+    const small = renderTimeoutFor(100 * 1024 ** 2);
+    const large = renderTimeoutFor(4 * 1024 ** 3);
+    expect(large).toBeGreaterThan(small * 3);
+  });
+
+  it("still allows a generous minimum for a tiny file", () => {
+    expect(renderTimeoutFor(0)).toBeGreaterThanOrEqual(6 * 60 * 1000);
+  });
+
+  it("works on whichever disk is configured, preferring a mounted volume", async () => {
+    const { env } = await import("../src/config/env.js");
+    const state = env as Record<string, unknown>;
+
+    state.VIDEO_WORK_DIR = undefined;
+    state.RAILWAY_VOLUME_MOUNT_PATH = "/mnt/volume";
+    expect(workRoot()).toBe("/mnt/volume");
+
+    // An explicit setting wins over the platform's.
+    state.VIDEO_WORK_DIR = "/data/video";
+    expect(workRoot()).toBe("/data/video");
+
+    state.VIDEO_WORK_DIR = undefined;
+    state.RAILWAY_VOLUME_MOUNT_PATH = undefined;
+    expect(workRoot()).toBeTruthy();
   });
 });

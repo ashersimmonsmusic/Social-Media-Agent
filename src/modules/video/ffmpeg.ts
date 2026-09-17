@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, statfs } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { env } from "../../config/env.js";
+import { logger } from "../../lib/logger.js";
 
 const run = promisify(execFile);
 
@@ -13,12 +15,19 @@ export const TARGET_WIDTH = 1080;
 export const TARGET_HEIGHT = 1920;
 
 /**
- * Rendering a 90-second clip takes tens of seconds on a small container. The
- * timeout exists because an ffmpeg that hangs would otherwise hold the process
- * open forever; it is generous enough that a legitimate render never trips it.
+ * The timeout exists because an ffmpeg that hangs would hold the process open
+ * forever, not to cap how long a real render may take — so it scales with the
+ * source. A 2GB 4K file spends minutes just decoding to the point it needs, and
+ * a fixed ceiling would kill the large renders this limit was raised to allow.
  */
-const RENDER_TIMEOUT_MS = 6 * 60 * 1000;
+const RENDER_TIMEOUT_BASE_MS = 6 * 60 * 1000;
+const RENDER_TIMEOUT_PER_GB_MS = 10 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 30 * 1000;
+
+export function renderTimeoutFor(sourceBytes: number): number {
+  const gb = Math.max(0, sourceBytes) / 1024 ** 3;
+  return Math.round(RENDER_TIMEOUT_BASE_MS + gb * RENDER_TIMEOUT_PER_GB_MS);
+}
 
 /** Frames are only for the model to look at, so they're small and few. */
 const FRAME_WIDTH = 512;
@@ -55,6 +64,8 @@ export type ReframePlan =
 export interface RenderOptions {
   startSeconds?: number;
   durationSeconds?: number;
+  /** Used only to scale the hang timeout — a bigger source legitimately takes longer. */
+  sourceBytes?: number;
 }
 
 /**
@@ -292,12 +303,60 @@ export async function renderVertical(
   probed: VideoProbe,
   options: RenderOptions = {},
 ): Promise<void> {
-  await ffmpeg(renderArgs(input, output, plan, probed, options), RENDER_TIMEOUT_MS, "convert that video to vertical");
+  await ffmpeg(
+    renderArgs(input, output, plan, probed, options),
+    renderTimeoutFor(options.sourceBytes ?? 0),
+    "convert that video to vertical",
+  );
+}
+
+/**
+ * Where to put a source file and its render while ffmpeg works.
+ *
+ * A container's own temp space is small and shared with everything else the
+ * process does, which is what made a 300MB cap feel necessary. A mounted volume
+ * is sized deliberately, so it is preferred when there is one.
+ */
+export function workRoot(): string {
+  return env.VIDEO_WORK_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || tmpdir();
+}
+
+export class NotEnoughDiskError extends Error {
+  constructor(neededBytes: number, freeBytes: number) {
+    super(
+      `That clip needs about ${(neededBytes / 1024 ** 3).toFixed(1)}GB of working space and there's only ` +
+        `${(freeBytes / 1024 ** 3).toFixed(1)}GB free. Export a smaller version, or add disk in Railway.`,
+    );
+    this.name = "NotEnoughDiskError";
+  }
+}
+
+/**
+ * Refuses a job that cannot fit before downloading a gigabyte to discover it.
+ *
+ * Budgets for the source plus its render plus headroom: running the disk to
+ * zero fails every other write in the container, not just this one, so the
+ * clean refusal is worth the check.
+ */
+export async function assertRoomFor(sourceBytes: number, dir = workRoot()): Promise<void> {
+  const needed = sourceBytes * 1.5 + 512 * 1024 * 1024;
+  try {
+    const stats = await statfs(dir);
+    const free = stats.bavail * stats.bsize;
+    if (free < needed) throw new NotEnoughDiskError(needed, free);
+  } catch (error) {
+    if (error instanceof NotEnoughDiskError) throw error;
+    // A filesystem that won't report its size is not a reason to refuse work.
+    logger.warn("video.disk_check_failed", { dir, error: String(error) });
+  }
 }
 
 /** Runs `work` with a private temp directory that is always removed after. */
 export async function withTempDir<T>(work: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await mkdtemp(join(tmpdir(), "video-"));
+  const root = workRoot();
+  // The volume's mount point exists, but a subdirectory under it may not.
+  await mkdir(root, { recursive: true }).catch(() => {});
+  const dir = await mkdtemp(join(root, "video-"));
   try {
     return await work(dir);
   } finally {

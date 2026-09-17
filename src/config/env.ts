@@ -116,7 +116,12 @@ const envSchema = z.object({
   // Video processing. The source cap exists because ffmpeg works on a real file
   // on the container's ephemeral disk: a 2GB source would fill it and fail the
   // whole app, not just the render.
-  VIDEO_MAX_SOURCE_MB: z.coerce.number().positive().default(300),
+  VIDEO_MAX_SOURCE_MB: z.coerce.number().positive().default(2048),
+  // Where the source file and the render live while ffmpeg works. Defaults to
+  // the volume when Railway mounts one, because the container's own temp space
+  // is small and shared with everything else the process does.
+  VIDEO_WORK_DIR: optionalString(),
+  RAILWAY_VOLUME_MOUNT_PATH: optionalString(),
 
   STORAGE_DRIVER: z.enum(["local"]).default("local"),
   STORAGE_LOCAL_PATH: stringWithDefault("./uploads"),

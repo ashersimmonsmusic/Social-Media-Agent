@@ -73,7 +73,10 @@ Say these out loud now so they're not a surprise later:
 ## Requirements for the source clip
 
 - **MP4 or MOV**, H.264 video. Straight off a phone or out of CapCut is fine.
-- **Under 300MB** (`VIDEO_MAX_SOURCE_MB`). Export at 1080p, not 4K.
+- **Under 2GB** (`VIDEO_MAX_SOURCE_MB`). Raise it further if you need to — the
+  real limit is the disk on your Railway volume, and the bot checks there's
+  room before it downloads anything rather than filling the disk and failing
+  half way.
 - Anything else Instagram rejects at the upload stage with a useless error code,
   so the bot re-encodes every clip to what Instagram accepts regardless of what
   went in.

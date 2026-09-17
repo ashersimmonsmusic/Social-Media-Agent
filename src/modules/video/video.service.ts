@@ -5,8 +5,16 @@ import { logger } from "../../lib/logger.js";
 import { prisma } from "../../db/prisma.js";
 import { ingestFile } from "../assets/asset.service.js";
 import { recordAudit } from "../audit/audit.service.js";
-import { downloadToFile, formatDuration } from "../drive/drive.service.js";
-import { probe, renderVertical, withTempDir, REELS_MAX_SECONDS, VideoToolError, type ReframePlan } from "./ffmpeg.js";
+import { downloadToFile, formatDuration, getVideo } from "../drive/drive.service.js";
+import {
+  assertRoomFor,
+  probe,
+  renderVertical,
+  withTempDir,
+  REELS_MAX_SECONDS,
+  VideoToolError,
+  type ReframePlan,
+} from "./ffmpeg.js";
 import { decideReframe, type ReframeMode } from "./reframe.service.js";
 
 export interface PrepareVideoInput {
@@ -54,6 +62,12 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
     const sourcePath = join(dir, "source");
     const outputPath = join(dir, "vertical.mp4");
 
+    // Checked before the download, not after: discovering there is no room for
+    // a 2GB file having already fetched it wastes the time and the bandwidth,
+    // and leaves the disk full for everything else in the container.
+    const { sizeBytes } = await getVideo(input.driveFileId);
+    await assertRoomFor(sizeBytes);
+
     const meta = await downloadToFile(input.driveFileId, sourcePath, maxBytes);
     const probed = await probe(sourcePath);
 
@@ -68,7 +82,10 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
     const trimmed = available > REELS_MAX_SECONDS;
 
     const decision = await decideReframe(sourcePath, probed, input.mode ?? "auto");
-    await renderVertical(sourcePath, outputPath, decision.plan, probed, { startSeconds });
+    await renderVertical(sourcePath, outputPath, decision.plan, probed, {
+      startSeconds,
+      sourceBytes: meta.sizeBytes,
+    });
 
     const rendered = await readFile(outputPath);
     const { size } = await stat(outputPath);
