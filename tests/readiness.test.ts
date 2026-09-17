@@ -33,7 +33,7 @@ beforeEach(() => {
     SOCIAL_TOKEN_KEY: "k".repeat(64),
     PUBLIC_BASE_URL: "https://app.up.railway.app",
   });
-  dbState.account = { platformAccountId: "178414000", accessToken: "cipher" };
+  dbState.account = { platformAccountId: "178414000", accessToken: "cipher", authType: "FACEBOOK_LOGIN" };
   vi.spyOn(globalThis, "fetch").mockImplementation(
     async () => new Response(JSON.stringify({ id: "178414000", username: "ashersimmonsmusic" }), { status: 200 }),
   );
@@ -108,5 +108,39 @@ describe("formatReadiness", () => {
     dbState.account = null;
     const text = formatReadiness(await checkPostingReadiness());
     expect(text).toMatch(/Not ready — 2 things above/);
+  });
+});
+
+describe("with an Instagram Login connection", () => {
+  beforeEach(() => {
+    dbState.account = { platformAccountId: "17841401850490652", accessToken: "cipher", authType: "INSTAGRAM_LOGIN" };
+  });
+
+  it("asks Instagram's host, not Facebook's", async () => {
+    // The same token sent to graph.facebook.com answers "Cannot parse access
+    // token", which reads as a dead credential rather than a wrong server.
+    let asked = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      asked = String(input);
+      return new Response(JSON.stringify({ user_id: "1784140", username: "ashersimmonsmusic" }), { status: 200 });
+    });
+
+    const readiness = await checkPostingReadiness();
+
+    expect(asked).toContain("graph.instagram.com");
+    expect(asked).not.toContain("graph.facebook.com");
+    expect(named(readiness, "still accepts").ok).toBe(true);
+  });
+
+  it("does not send him to fix App Roles, which has no bearing on this path", async () => {
+    const text = formatReadiness(await checkPostingReadiness());
+    expect(text).not.toMatch(/Instagram Tester/);
+    expect(text).toMatch(/60 days/);
+  });
+
+  it("still tells him about App Roles on the Page route", async () => {
+    dbState.account = { platformAccountId: "178414000", accessToken: "cipher", authType: "FACEBOOK_LOGIN" };
+    const text = formatReadiness(await checkPostingReadiness());
+    expect(text).toMatch(/Instagram Tester/);
   });
 });

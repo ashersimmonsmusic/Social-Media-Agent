@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type { SocialAuthType } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
 import { decryptToken } from "../../lib/tokenCrypto.js";
@@ -27,6 +28,8 @@ export interface Readiness {
   /** True when a post would genuinely leave the server. */
   canPost: boolean;
   dryRun: boolean;
+  /** Which login the stored token came from — the advice differs by path. */
+  authType?: SocialAuthType;
   checks: ReadinessCheck[];
   /** Video needs more than a photo does; reported separately so it can't block a photo. */
   videoChecks: ReadinessCheck[];
@@ -57,10 +60,23 @@ export function resetToolCheck() {
   ffmpegPresent = null;
 }
 
-/** Confirms Meta still accepts the stored token, which nothing else reveals until publish time. */
-async function tokenWorks(platformAccountId: string, accessToken: string): Promise<{ ok: boolean; detail?: string }> {
-  const url = new URL(`https://graph.facebook.com/${env.META_GRAPH_API_VERSION}/${platformAccountId}`);
-  url.searchParams.set("fields", "id,username");
+/**
+ * Confirms Meta still accepts the stored token, which nothing else reveals until
+ * publish time.
+ *
+ * Which host to ask is not a detail: an Instagram Login token sent to
+ * graph.facebook.com comes back "Cannot parse access token", which reads as a
+ * broken credential rather than a question put to the wrong server.
+ */
+async function tokenWorks(
+  account: { platformAccountId: string; authType: SocialAuthType },
+  accessToken: string,
+): Promise<{ ok: boolean; detail?: string }> {
+  const instagramLogin = account.authType === "INSTAGRAM_LOGIN";
+  const url = instagramLogin
+    ? new URL(`https://graph.instagram.com/${env.META_GRAPH_API_VERSION}/me`)
+    : new URL(`https://graph.facebook.com/${env.META_GRAPH_API_VERSION}/${account.platformAccountId}`);
+  url.searchParams.set("fields", instagramLogin ? "user_id,username" : "id,username");
   url.searchParams.set("access_token", accessToken);
 
   try {
@@ -104,7 +120,7 @@ export async function checkPostingReadiness(): Promise<Readiness> {
   if (account && hasKey) {
     let live: { ok: boolean; detail?: string };
     try {
-      live = await tokenWorks(account.platformAccountId, decryptToken(account.accessToken));
+      live = await tokenWorks(account, decryptToken(account.accessToken));
     } catch (error) {
       live = { ok: false, detail: error instanceof Error ? error.message : String(error) };
     }
@@ -127,6 +143,7 @@ export async function checkPostingReadiness(): Promise<Readiness> {
   return {
     canPost: checks.every((check) => check.ok) && !env.DRY_RUN,
     dryRun: env.DRY_RUN,
+    authType: account?.authType,
     checks,
     videoChecks,
   };
@@ -162,13 +179,23 @@ export function formatReadiness(readiness: Readiness): string {
 
   // Said plainly because it is the one blocker nothing here can detect: Meta
   // grants the permission, and it only surfaces as a refusal at publish time.
-  lines.push(
-    "",
-    "One thing I can't check from here: whether your Instagram account holds a role on your Meta app. " +
-      "Posting to your own account needs that rather than App Review — add it as an Instagram Tester under " +
-      "App Roles, accept the invite at instagram.com/accounts/manage_access, then generate the token. " +
-      "An unaccepted invite looks exactly like a missing permission.",
-  );
+  // Advice that applies to the other login path is worse than none: it sends him
+  // to fix something that has no bearing on how this token was obtained.
+  if (readiness.authType === "INSTAGRAM_LOGIN") {
+    lines.push(
+      "",
+      "Connected through Instagram directly, so there's no Facebook Page or App Review in the way. " +
+        "The token lasts 60 days and I renew it on my own before it runs out.",
+    );
+  } else {
+    lines.push(
+      "",
+      "One thing I can't check from here: whether your Instagram account holds a role on your Meta app. " +
+        "Posting to your own account needs that rather than App Review — add it as an Instagram Tester under " +
+        "App Roles, accept the invite at instagram.com/accounts/manage_access, then generate the token. " +
+        "An unaccepted invite looks exactly like a missing permission.",
+    );
+  }
 
   return lines.join("\n");
 }
