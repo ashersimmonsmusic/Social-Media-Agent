@@ -3,6 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { storage } from "../../storage/index.js";
 import { recordAudit } from "../audit/audit.service.js";
+import { sweepStaleWorkDirs } from "./ffmpeg.js";
 
 /**
  * Deletes the bytes of rendered clips that have already gone out.
@@ -32,6 +33,10 @@ function sizeOf(metadata: unknown): number {
 }
 
 export async function purgeSpentVideoBytes(retentionDays = env.VIDEO_RETENTION_DAYS): Promise<PurgeResult> {
+  // Files from a render that died take space that nothing accounts for, which
+  // reads as a disk mysteriously full of nothing.
+  await sweepStaleWorkDirs().catch((error) => logger.warn("video.sweep_error", { error: String(error) }));
+
   const cutoff = new Date(Date.now() - Math.max(0, retentionDays) * 86_400_000);
 
   const candidates = await prisma.asset.findMany({

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, statfs } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, statfs } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -388,10 +388,55 @@ export async function assertRoomFor(sourceBytes: number, dir = workRoot()): Prom
   }
 }
 
+/**
+ * Working files live in their own subdirectory rather than loose among the
+ * stored library, which shares the same volume.
+ */
+const TEMP_SUBDIR = ".video-tmp";
+
+/** Old enough that nothing still running could own it. */
+const STALE_TEMP_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Removes working directories left behind by a render that died.
+ *
+ * A container killed mid-render — a deploy, a restart, an out-of-memory — leaves
+ * its source file on the volume with nothing to clean it up. On a small volume
+ * two of those is the whole disk, and the symptom is every later render
+ * refusing for lack of space that nothing appears to be using.
+ */
+export async function sweepStaleWorkDirs(): Promise<number> {
+  const root = join(workRoot(), TEMP_SUBDIR);
+  let removed = 0;
+
+  let entries: string[];
+  try {
+    entries = await readdir(root);
+  } catch {
+    return 0; // nothing has run yet
+  }
+
+  for (const entry of entries) {
+    if (!entry.startsWith("video-")) continue;
+    const path = join(root, entry);
+    try {
+      const info = await stat(path);
+      if (Date.now() - info.mtimeMs < STALE_TEMP_MS) continue;
+      await rm(path, { recursive: true, force: true });
+      removed += 1;
+    } catch (error) {
+      logger.warn("video.sweep_failed", { path, error: String(error) });
+    }
+  }
+
+  if (removed > 0) logger.info("video.stale_work_dirs_removed", { removed });
+  return removed;
+}
+
 /** Runs `work` with a private temp directory that is always removed after. */
 export async function withTempDir<T>(work: (dir: string) => Promise<T>): Promise<T> {
-  const root = workRoot();
-  // The volume's mount point exists, but a subdirectory under it may not.
+  const root = join(workRoot(), TEMP_SUBDIR);
+  // The volume's mount point exists, but this subdirectory may not.
   await mkdir(root, { recursive: true }).catch(() => {});
   const dir = await mkdtemp(join(root, "video-"));
   try {

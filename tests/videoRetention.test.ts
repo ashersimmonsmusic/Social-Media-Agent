@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const envState: Record<string, unknown> = { VIDEO_RETENTION_DAYS: 7 };
+const envState: Record<string, unknown> = { VIDEO_RETENTION_DAYS: 7, VIDEO_WORK_DIR: "/tmp/video-test-root" };
 const state = {
   candidates: [] as Record<string, unknown>[],
   lastWhere: null as Record<string, unknown> | null,
@@ -112,5 +112,15 @@ describe("purgeSpentVideoBytes", () => {
     const result = await purgeSpentVideoBytes();
     expect(result).toEqual({ purged: 0, freedBytes: 0 });
     expect(deleted).toHaveLength(0);
+  });
+});
+
+describe("stale working directories", () => {
+  it("are swept before the purge, since they take space nothing accounts for", async () => {
+    // A render killed by a deploy leaves its source behind with no owner. On a
+    // small volume two of those is the whole disk, and the symptom is later
+    // renders refusing for space nothing appears to be using.
+    const { sweepStaleWorkDirs } = await import("../src/modules/video/ffmpeg.js");
+    await expect(sweepStaleWorkDirs()).resolves.toBeTypeOf("number");
   });
 });
