@@ -17,7 +17,7 @@ import { registerSocialCommands } from "./commands/social.js";
 import { registerWebsiteCommands } from "./commands/website.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerNewsletterCommand } from "./commands/newsletter.js";
-import { registerDriveCommands } from "./commands/drive.js";
+import { registerDriveCommands, registerDriveCallbacks } from "./commands/drive.js";
 import { registerUploadHandlers } from "./handlers/uploads.js";
 import { registerTextHandler } from "./handlers/text.js";
 import { registerApprovalCallbacks } from "./callbacks.js";
@@ -57,6 +57,7 @@ export function createBot(): Telegraf {
   registerStatsCommand(bot);
   registerNewsletterCommand(bot);
   registerDriveCommands(bot);
+  registerDriveCallbacks(bot);
   registerApprovalCallbacks(bot);
 
   // Upload/text handlers must be registered last so command handlers match first.

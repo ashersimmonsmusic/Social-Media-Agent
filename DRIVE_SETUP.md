@@ -254,12 +254,22 @@ A folder ID is a label, not a key. Safe to share.
 
 ## Using it
 
-Drop clips into that folder. Then:
+Drop clips into that folder. Then send:
 
 ```
-/videos          what's in there
-/reel <id>       make one vertical, sent back for you to watch
+/videos
 ```
+
+You get a tappable list. Tap a clip and it comes back vertical, ready to watch.
+
+You can also ask in plain words — *"rename that first one to Louisiana live
+keys"* — and the bot will tidy your Drive for you. Renaming is the only change
+it can make there: it cannot move, delete or alter a file, and every rename is
+logged with the previous name so it can be undone.
+
+**If renaming fails with a permission error, run `/drive` again.** A connection
+made before this existed was only granted read access, and Google won't widen
+it without you re-approving.
 
 `VIDEO_WORKFLOW.md` covers the rest.
 

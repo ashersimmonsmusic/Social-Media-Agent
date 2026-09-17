@@ -17,7 +17,7 @@ import { buildDocument, InvalidDocumentError, WEBSITE_CONTENT_TYPES, type Websit
 import type { WebsiteContentPayload } from "../telegram/commands/website.js";
 import { getStats, formatStats } from "../modules/analytics/analytics.service.js";
 import { getRecipients } from "../modules/email/newsletter.service.js";
-import { listVideos, formatVideoList } from "../modules/drive/drive.service.js";
+import { listVideos, formatVideoList, renameFile } from "../modules/drive/drive.service.js";
 import type { NewsletterPayload } from "../telegram/commands/newsletter.js";
 import { logger } from "../lib/logger.js";
 
@@ -260,6 +260,23 @@ export function buildToolExecutor(telegram: Telegram) {
           return formatVideoList(await listVideos(15));
         } catch (error) {
           return error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      case "rename_drive_video": {
+        const args = input as { drive_file_id?: string; new_name?: string };
+        if (!args.drive_file_id) return "I need the Drive file id — call list_drive_videos first.";
+        if (!args.new_name?.trim()) return "I need a name to give it.";
+
+        try {
+          const { from, to } = await renameFile(args.drive_file_id, args.new_name);
+          return from === to
+            ? `That file was already called "${to}".`
+            : `Renamed "${from}" to "${to}" in his Drive.`;
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          logger.error("tool.rename_drive_failed", { error: detail });
+          return `I couldn't rename that: ${detail}`;
         }
       }
 

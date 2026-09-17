@@ -19,9 +19,11 @@ const RESOLVING_ACTIONS: Record<string, "APPROVED" | "REJECTED" | "CANCELLED"> =
 };
 
 export function registerApprovalCallbacks(bot: Telegraf) {
-  bot.on("callback_query", async (ctx) => {
+  bot.on("callback_query", async (ctx, next) => {
     const data = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
-    if (!data || !data.startsWith("approval:")) return;
+    // Pass anything that isn't ours down the chain: returning here instead would
+    // silently swallow every other button in the bot.
+    if (!data || !data.startsWith("approval:")) return next();
 
     const [, approvalId, action] = data.split(":");
     if (!approvalId || !action) return;

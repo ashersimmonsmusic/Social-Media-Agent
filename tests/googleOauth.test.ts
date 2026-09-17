@@ -22,12 +22,15 @@ describe("authorisationUrl", () => {
     envState.PUBLIC_BASE_URL = "https://bot.up.railway.app";
   });
 
-  it("asks only for read access to Drive", () => {
-    const scope = new URL(authorisationUrl()).searchParams.get("scope")!;
-    expect(scope).toContain("drive.readonly");
-    // Anything broader could delete his footage.
-    expect(scope).not.toContain("auth/drive ");
-    expect(DRIVE_SCOPES.some((s) => s.endsWith("/drive"))).toBe(false);
+  it("asks for the Drive scope renaming requires, and nothing beyond it", () => {
+    // Google offers nothing between read-only and full access, and renaming an
+    // existing file needs the latter. What keeps that safe is enforced in code,
+    // not here: see the "no destructive Drive calls" test.
+    const scope = new URL(authorisationUrl()).searchParams.get("scope") ?? "";
+    expect(scope).toContain("https://www.googleapis.com/auth/drive");
+    expect(scope).not.toContain("drive.metadata");
+    expect(scope).not.toContain("gmail");
+    expect(scope).not.toContain("calendar");
   });
 
   it("requests offline access and consent, or the grant dies in an hour", () => {

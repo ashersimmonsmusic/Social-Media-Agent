@@ -68,11 +68,11 @@ describe("buildAssertion", () => {
     expect(valid).toBe(true);
   });
 
-  it("claims only read access, and only to Drive", () => {
+  it("claims Drive and nothing else", () => {
     const assertion = buildAssertion(parseServiceAccountKey(keyFile), 1_700_000_000);
     const claims = decodeSegment(assertion.split(".")[1]!);
 
-    expect(claims.scope).toBe("https://www.googleapis.com/auth/drive.readonly");
+    expect(claims.scope).toBe("https://www.googleapis.com/auth/drive");
     expect(claims.iss).toBe("bot@proj.iam.gserviceaccount.com");
     expect(claims.aud).toBe("https://oauth2.googleapis.com/token");
   });

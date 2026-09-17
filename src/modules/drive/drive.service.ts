@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { env } from "../../config/env.js";
 import { getAccessToken } from "../oauth/google.service.js";
+import { recordAudit } from "../audit/audit.service.js";
 import { isServiceAccountConfigured, serviceAccountEmail } from "../oauth/serviceAccount.js";
 
 export interface DriveVideo {
@@ -221,12 +222,78 @@ export async function downloadToFile(fileId: string, destination: string, maxByt
   return meta;
 }
 
+/**
+ * Renames one file. The only write this app makes to Drive.
+ *
+ * Deliberately narrow: it sends `name` and nothing else, so it cannot move a
+ * file, change its contents, or trash it, whatever the granted scope would
+ * allow. The previous name goes into the audit log, which is what makes this
+ * reversible — a rename is otherwise silent and hard to undo from memory.
+ */
+export async function renameFile(fileId: string, newName: string): Promise<{ from: string; to: string }> {
+  const trimmed = newName.trim();
+  if (!trimmed) throw new DriveError("A file needs a name — I can't set it to nothing.");
+  if (trimmed.length > 200) throw new DriveError("That name is too long; keep it under 200 characters.");
+  // A name with a slash in it reads as a path and confuses every tool that
+  // touches the file afterwards, including this one.
+  if (/[/\\]/.test(trimmed)) throw new DriveError("A file name can't contain slashes.");
+
+  const existing = await getVideo(fileId);
+
+  // Losing the extension makes the file unopenable on most systems, and the
+  // model writing a friendly name will not think to keep it.
+  const extension = existing.name.includes(".") ? existing.name.slice(existing.name.lastIndexOf(".")) : "";
+  const finalName = extension && !trimmed.toLowerCase().endsWith(extension.toLowerCase())
+    ? `${trimmed}${extension}`
+    : trimmed;
+
+  if (finalName === existing.name) return { from: existing.name, to: finalName };
+
+  const token = await getAccessToken();
+  const url = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`);
+  url.searchParams.set("supportsAllDrives", "true");
+  url.searchParams.set("fields", "id,name");
+
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ name: finalName }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new DriveError(
+      response.status === 403
+        ? `Google won't let me rename ${existing.name}. If you connected before I could write to Drive, run /drive again to re-approve.`
+        : `Google refused the rename (${response.status}): ${text.slice(0, 200)}`,
+    );
+  }
+
+  await recordAudit({
+    action: "drive.file_renamed",
+    entityType: "DriveFile",
+    entityId: fileId,
+    actorType: "AI",
+    details: { from: existing.name, to: finalName },
+  });
+
+  return { from: existing.name, to: finalName };
+}
+
 export function formatDuration(millis?: number): string {
   if (!millis) return "unknown length";
   const total = Math.round(millis / 1000);
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+/** A short label for a button: name, length and shape, without the id. */
+export function videoButtonLabel(video: DriveVideo): string {
+  const name = video.name.replace(/\.[^.]+$/, "");
+  const shape = video.width && video.height && video.width > video.height ? "wide" : "tall";
+  // Telegram wraps long button text badly on a phone, so this stays short.
+  const trimmed = name.length > 28 ? `${name.slice(0, 27)}…` : name;
+  return `${trimmed} · ${formatDuration(video.durationMillis)} · ${shape}`;
 }
 
 export function formatVideoList(videos: DriveVideo[]): string {

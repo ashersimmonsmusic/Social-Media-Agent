@@ -1,4 +1,4 @@
-import type { Telegraf } from "telegraf";
+import type { Context, Telegraf } from "telegraf";
 import { env } from "../../config/env.js";
 import {
   authorisationUrl,
@@ -8,7 +8,14 @@ import {
   GoogleNotConnectedError,
   GoogleReauthRequiredError,
 } from "../../modules/oauth/google.service.js";
-import { listVideos, formatVideoList, DriveError } from "../../modules/drive/drive.service.js";
+import {
+  listVideos,
+  formatVideoList,
+  videoButtonLabel,
+  renameFile,
+  DriveError,
+  type DriveVideo,
+} from "../../modules/drive/drive.service.js";
 import { isServiceAccountConfigured, serviceAccountEmail } from "../../modules/oauth/serviceAccount.js";
 import { prepareVideoForReels, formatPreparedVideo } from "../../modules/video/video.service.js";
 import { VideoToolError } from "../../modules/video/ffmpeg.js";
@@ -95,64 +102,13 @@ export function registerDriveCommands(bot: Telegraf) {
     const fileId = parts[0];
 
     if (!fileId) {
-      await ctx.reply(
-        [
-          "Usage: /reel <video-id> [crop|blur] [start-seconds]",
-          "",
-          "Get the id from /videos. I'll make a vertical 9:16 cut and send it back for you to watch.",
-          "",
-          "Leave the mode off and I'll look at the footage and decide: crop in on the subject if it stays put, ",
-          "or keep the whole frame with a blurred fill if it doesn't. Add crop or blur to force one.",
-        ].join("\n"),
-      );
+      await ctx.reply("Send /videos and tap the clip you want — no need to type an id.");
       return;
     }
 
     const mode: ReframeMode = parts.includes("crop") ? "crop" : parts.includes("blur") ? "blur" : "auto";
     const startArg = parts.slice(1).find((part) => /^\d+$/.test(part));
-
-    await ctx.reply("Working on it — reading the footage, deciding the framing, then rendering. Usually a minute or two.");
-
-    try {
-      await ctx.sendChatAction("upload_video");
-      const prepared = await prepareVideoForReels({
-        driveFileId: fileId,
-        mode,
-        startSeconds: startArg ? Number(startArg) : undefined,
-      });
-
-      const asset = await getAsset(prepared.assetId);
-      const sent = asset?.storageKey
-        ? await sendVideoPreview(ctx.telegram, {
-            data: await storage.read(asset.storageKey),
-            filename: prepared.filename,
-            caption: prepared.reason,
-          })
-        : false;
-
-      await ctx.reply(
-        formatPreparedVideo(prepared) +
-          (sent
-            ? "\n\nAsk me for a caption when you've watched it."
-            : "\n\nThe clip is too big to send here, so you haven't seen it yet — it's in your library either way."),
-      );
-    } catch (error) {
-      if (
-        error instanceof GoogleNotConnectedError ||
-        error instanceof GoogleNotConfiguredError ||
-        error instanceof GoogleReauthRequiredError
-      ) {
-        await ctx.reply(error.message);
-        return;
-      }
-      const detail = error instanceof Error ? error.message : String(error);
-      logger.error("reel.prepare_failed", { fileId, error: detail });
-      await ctx.reply(
-        error instanceof VideoToolError || error instanceof DriveError
-          ? detail
-          : `Couldn't make that into a Reel:\n\n${detail.slice(0, 400)}`,
-      );
-    }
+    await makeReel(ctx, fileId, mode, startArg ? Number(startArg) : undefined);
   });
 
   bot.command(commandTrigger("drivedisconnect"), async (ctx) => {
@@ -167,8 +123,23 @@ export function registerDriveCommands(bot: Telegraf) {
   bot.command(commandTrigger("videos"), async (ctx) => {
     try {
       await ctx.sendChatAction("typing");
-      const videos = await listVideos(15);
-      await ctx.reply(`YOUR VIDEOS\n\n${formatVideoList(videos)}`.slice(0, 4000));
+      const videos = await listVideos(12);
+
+      if (videos.length === 0) {
+        await ctx.reply(formatVideoList(videos));
+        return;
+      }
+
+      // One button per clip rather than an id to copy: on a phone, transcribing
+      // a 33-character Drive id from a message into a command is the step where
+      // this stops being used.
+      await ctx.reply("YOUR VIDEOS\n\nTap one and I'll make it vertical.", {
+        reply_markup: {
+          inline_keyboard: videos.map((video: DriveVideo) => [
+            { text: videoButtonLabel(video), callback_data: `reel:${video.id}` },
+          ]),
+        },
+      });
     } catch (error) {
       if (
         error instanceof GoogleNotConnectedError ||
@@ -184,5 +155,73 @@ export function registerDriveCommands(bot: Telegraf) {
         error instanceof DriveError ? detail : `Couldn't read your Drive:\n\n${detail.slice(0, 300)}`,
       );
     }
+  });
+}
+
+/**
+ * Prepares one clip and reports back. Shared by the /reel command and the
+ * buttons on /videos, so the two cannot drift into behaving differently.
+ */
+async function makeReel(
+  ctx: Context,
+  fileId: string,
+  mode: ReframeMode = "auto",
+  startSeconds?: number,
+): Promise<void> {
+  await ctx.reply("Working on it — reading the footage, deciding the framing, then rendering. Usually a minute or two.");
+
+  try {
+    await ctx.sendChatAction("upload_video");
+    const prepared = await prepareVideoForReels({ driveFileId: fileId, mode, startSeconds });
+
+    const asset = await getAsset(prepared.assetId);
+    const sent = asset?.storageKey
+      ? await sendVideoPreview(ctx.telegram, {
+          data: await storage.read(asset.storageKey),
+          filename: prepared.filename,
+          caption: prepared.reason,
+        })
+      : false;
+
+    await ctx.reply(
+      formatPreparedVideo(prepared) +
+        (sent
+          ? "\n\nAsk me for a caption when you've watched it."
+          : "\n\nThe clip is too big to send here, so you haven't seen it yet — it's in your library either way."),
+    );
+  } catch (error) {
+    if (
+      error instanceof GoogleNotConnectedError ||
+      error instanceof GoogleNotConfiguredError ||
+      error instanceof GoogleReauthRequiredError
+    ) {
+      await ctx.reply(error.message);
+      return;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    logger.error("reel.prepare_failed", { fileId, error: detail });
+    await ctx.reply(
+      error instanceof VideoToolError || error instanceof DriveError
+        ? detail
+        : `Couldn't make that into a Reel:\n\n${detail.slice(0, 400)}`,
+    );
+  }
+}
+
+/** Handles a tap on one of the clips listed by /videos. */
+export function registerDriveCallbacks(bot: Telegraf) {
+  bot.on("callback_query", async (ctx, next) => {
+    const data = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+    if (!data || !data.startsWith("reel:")) return next();
+
+    const fileId = data.slice("reel:".length);
+    // Answered immediately: Telegram shows a spinner on the button until it is,
+    // and rendering takes minutes.
+    await ctx.answerCbQuery("Starting…");
+    // The list has served its purpose, and leaving live buttons invites a second
+    // render of the same clip while the first is still going.
+    await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+
+    await makeReel(ctx, fileId);
   });
 }
