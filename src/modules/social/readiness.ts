@@ -4,6 +4,7 @@ import type { SocialAuthType } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
 import { decryptToken } from "../../lib/tokenCrypto.js";
+import { diskReport } from "../video/ffmpeg.js";
 
 const run = promisify(execFile);
 
@@ -139,6 +140,31 @@ export async function checkPostingReadiness(): Promise<Readiness> {
       remedy: hasFfmpeg ? undefined : "ffmpeg is missing from the deployment — /reel can't work without it.",
     },
   ];
+
+  // Named rather than merely measured: "not enough space" and "measuring the
+  // wrong disk because the volume isn't mounted here" produce the same number,
+  // and only the path tells them apart.
+  const disk = await diskReport();
+  const gb = (bytes: number) => (bytes / 1024 ** 3).toFixed(1);
+  if (!disk.known) {
+    videoChecks.push({
+      name: `Working disk (${disk.dir})`,
+      ok: true,
+      remedy: "I couldn't measure it, so I'll attempt a render and find out the hard way.",
+    });
+  } else {
+    // Enough for a middling clip; below this most renders refuse before starting.
+    const comfortable = disk.freeBytes > 1024 ** 3;
+    videoChecks.push({
+      name: `Working disk: ${gb(disk.freeBytes)}GB free of ${gb(disk.totalBytes)}GB on ${disk.dir}`,
+      ok: comfortable,
+      remedy: comfortable
+        ? undefined
+        : `That's tight — most clips need about 0.4GB more than their own size. ` +
+          `Grow the volume in Railway → Settings → Volumes. If ${disk.dir} isn't your volume's mount path, ` +
+          `set VIDEO_WORK_DIR to it so I work there instead.`,
+    });
+  }
 
   return {
     canPost: checks.every((check) => check.ok) && !env.DRY_RUN,

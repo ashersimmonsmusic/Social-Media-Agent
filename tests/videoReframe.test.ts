@@ -9,8 +9,16 @@ vi.mock("../src/lib/logger.js", () => ({
 }));
 vi.mock("../src/ai/AIService.js", () => ({ aiService: { generate: async () => ({ text: "{}" }) } }));
 
-const { evenise, verticalSliceWidth, cropOffsetFor, renderArgs, REELS_MAX_SECONDS, renderTimeoutFor, workRoot } =
-  await import("../src/modules/video/ffmpeg.js");
+const {
+  evenise,
+  verticalSliceWidth,
+  cropOffsetFor,
+  renderArgs,
+  REELS_MAX_SECONDS,
+  renderTimeoutFor,
+  workRoot,
+  spaceNeededFor,
+} = await import("../src/modules/video/ffmpeg.js");
 const { parseFrameReadings, planFromReadings, isAlreadyVertical } = await import(
   "../src/modules/video/reframe.service.js"
 );
@@ -213,5 +221,29 @@ describe("handling large sources", () => {
     state.VIDEO_WORK_DIR = undefined;
     state.RAILWAY_VOLUME_MOUNT_PATH = undefined;
     expect(workRoot()).toBeTruthy();
+  });
+});
+
+describe("spaceNeededFor", () => {
+  const MB = 1024 ** 2;
+
+  it("does not scale the render allowance with the source", () => {
+    // The output is capped at 90 seconds of 1080x1920 however long the source
+    // is, so charging a multiple of the input demanded gigabytes to make a
+    // thirty-second clip.
+    const small = spaceNeededFor(100 * MB);
+    const large = spaceNeededFor(2000 * MB);
+    expect(large - small).toBe(1900 * MB);
+  });
+
+  it("asks for a sane amount for an ordinary clip", () => {
+    // A 130MB clip previously wanted 0.7GB, which refused on a small volume.
+    const needed = spaceNeededFor(130 * MB);
+    expect(needed).toBeLessThan(0.5 * 1024 ** 3);
+    expect(needed).toBeGreaterThan(130 * MB);
+  });
+
+  it("always leaves headroom, even for a tiny file", () => {
+    expect(spaceNeededFor(0)).toBeGreaterThan(200 * MB);
   });
 });

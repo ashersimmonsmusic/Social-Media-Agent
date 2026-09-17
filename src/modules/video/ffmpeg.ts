@@ -321,33 +321,70 @@ export function workRoot(): string {
   return env.VIDEO_WORK_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || tmpdir();
 }
 
+const MB = 1024 ** 2;
+
+/**
+ * Space to allow for the render itself.
+ *
+ * A flat multiple of the source was wrong: the output is capped at 90 seconds
+ * of 1080x1920, so it is roughly this size whether the source is 100MB or 4GB.
+ * Scaling with the input demanded gigabytes to make a thirty-second clip.
+ */
+const OUTPUT_ALLOWANCE_BYTES = 150 * MB;
+/** Frames, container overhead, and not running the disk to literal zero. */
+const SAFETY_BYTES = 150 * MB;
+
+function gb(bytes: number): string {
+  return `${(bytes / 1024 ** 3).toFixed(2)}GB`;
+}
+
 export class NotEnoughDiskError extends Error {
-  constructor(neededBytes: number, freeBytes: number) {
+  constructor(neededBytes: number, freeBytes: number, dir: string) {
     super(
-      `That clip needs about ${(neededBytes / 1024 ** 3).toFixed(1)}GB of working space and there's only ` +
-        `${(freeBytes / 1024 ** 3).toFixed(1)}GB free. Export a smaller version, or add disk in Railway.`,
+      `Not enough working space: this needs about ${gb(neededBytes)} and there's ${gb(freeBytes)} free on ${dir}.\n\n` +
+        `Either add disk (Railway → your service → Settings → Volumes) or export a smaller version. ` +
+        `If ${dir} looks like a temporary folder rather than a volume, the volume isn't mounted where I'm working — ` +
+        `set VIDEO_WORK_DIR to its mount path.`,
     );
     this.name = "NotEnoughDiskError";
   }
 }
 
-/**
- * Refuses a job that cannot fit before downloading a gigabyte to discover it.
- *
- * Budgets for the source plus its render plus headroom: running the disk to
- * zero fails every other write in the container, not just this one, so the
- * clean refusal is worth the check.
- */
-export async function assertRoomFor(sourceBytes: number, dir = workRoot()): Promise<void> {
-  const needed = sourceBytes * 1.5 + 512 * 1024 * 1024;
+export interface DiskReport {
+  dir: string;
+  freeBytes: number;
+  totalBytes: number;
+  /** False when the filesystem wouldn't answer, so a caller doesn't report zeros as fact. */
+  known: boolean;
+}
+
+export async function diskReport(dir = workRoot()): Promise<DiskReport> {
   try {
     const stats = await statfs(dir);
-    const free = stats.bavail * stats.bsize;
-    if (free < needed) throw new NotEnoughDiskError(needed, free);
+    return { dir, freeBytes: stats.bavail * stats.bsize, totalBytes: stats.blocks * stats.bsize, known: true };
   } catch (error) {
-    if (error instanceof NotEnoughDiskError) throw error;
-    // A filesystem that won't report its size is not a reason to refuse work.
     logger.warn("video.disk_check_failed", { dir, error: String(error) });
+    return { dir, freeBytes: 0, totalBytes: 0, known: false };
+  }
+}
+
+/** What a job of this size needs on disk, start to finish. */
+export function spaceNeededFor(sourceBytes: number): number {
+  return sourceBytes + OUTPUT_ALLOWANCE_BYTES + SAFETY_BYTES;
+}
+
+/**
+ * Refuses a job that cannot fit before downloading it to find out.
+ *
+ * Running the disk to zero fails every other write in the container, not just
+ * this one, so the clean refusal is worth the check.
+ */
+export async function assertRoomFor(sourceBytes: number, dir = workRoot()): Promise<void> {
+  const needed = spaceNeededFor(sourceBytes);
+  const report = await diskReport(dir);
+  // A filesystem that won't report its size is not a reason to refuse work.
+  if (report.known && report.freeBytes < needed) {
+    throw new NotEnoughDiskError(needed, report.freeBytes, dir);
   }
 }
 
