@@ -9,6 +9,7 @@ import { startScheduler, stopScheduler } from "./modules/social/scheduler.servic
 import { runPolling } from "./telegram/polling.js";
 import { startDriveWatch, stopDriveWatch } from "./modules/drive/driveHealth.js";
 import { startTokenRefresh, stopTokenRefresh } from "./modules/social/tokenRefresh.js";
+import { startRetention, stopRetention } from "./modules/video/retention.js";
 
 async function main() {
   const app = express();
@@ -55,6 +56,7 @@ async function main() {
   startScheduler();
   startDriveWatch(bot.telegram);
   startTokenRefresh();
+  if (env.VIDEO_RETENTION_DAYS > 0) startRetention();
 
   app.listen(env.PORT, () => {
     logger.info("http.listening", { port: env.PORT, dryRun: env.DRY_RUN });
@@ -64,12 +66,14 @@ async function main() {
     stopScheduler();
     stopDriveWatch();
     stopTokenRefresh();
+    stopRetention();
     bot.stop("SIGINT");
   });
   process.once("SIGTERM", () => {
     stopScheduler();
     stopDriveWatch();
     stopTokenRefresh();
+    stopRetention();
     bot.stop("SIGTERM");
   });
 }

@@ -121,6 +121,10 @@ const envSchema = z.object({
   // the volume when Railway mounts one, because the container's own temp space
   // is small and shared with everything else the process does.
   VIDEO_WORK_DIR: optionalString(),
+  // How long a rendered clip's file is kept after its post has gone out.
+  // Instagram has a copy and Drive has the original, so this only decides how
+  // long the third one lingers on the volume. 0 disables the cleanup.
+  VIDEO_RETENTION_DAYS: z.coerce.number().min(0).default(7),
   RAILWAY_VOLUME_MOUNT_PATH: optionalString(),
 
   STORAGE_DRIVER: z.enum(["local"]).default("local"),

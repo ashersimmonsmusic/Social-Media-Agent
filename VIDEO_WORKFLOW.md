@@ -112,6 +112,27 @@ Three posts, one sitting, done by Sunday evening.
 
 ---
 
+## Disk, and clearing up after itself
+
+Rendered clips are the only big thing this stores. A Railway volume on the Hobby
+plan tops out at 5GB, so they can't just pile up.
+
+They don't. **A week after a clip's post has gone out, its file is deleted.**
+Nothing is lost when that happens: Instagram has the post, Drive has the
+original footage, and the library entry stays so your history and `/stats` still
+show what went out and when — it just no longer has a file behind it.
+
+Anything still scheduled, awaiting approval, or drafted is never touched, even
+if the same clip was posted once before.
+
+Change the window with `VIDEO_RETENTION_DAYS` in Railway, or set it to `0` to
+keep everything forever.
+
+**Sizing the volume:** budget about 1.5× your largest clip for working space,
+plus room for a week of finished ones. 5GB is comfortable for 1080p. If you
+shoot 4K regularly you'll want Railway's Pro plan, which raises the ceiling
+considerably.
+
 ## Why it still asks before posting
 
 You could have it post unattended. You shouldn't, and it isn't built that way.
