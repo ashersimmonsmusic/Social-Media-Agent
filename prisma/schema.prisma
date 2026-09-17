@@ -307,6 +307,11 @@ enum SocialPlatform {
   YOUTUBE
 }
 
+enum SocialAuthType {
+  FACEBOOK_LOGIN
+  INSTAGRAM_LOGIN
+}
+
 model SocialAccount {
   id                String         @id @default(cuid())
   platform          SocialPlatform
@@ -316,6 +321,13 @@ model SocialAccount {
   /// AES-256-GCM ciphertext. Never store or log a token in plaintext.
   accessToken       String
   tokenExpiresAt    DateTime?
+  /// Refresh token where the platform issues one. Encrypted like accessToken.
+  refreshToken      String?
+  /// Which Instagram API the stored token belongs to. The two use different
+  /// hosts and cannot be told apart from the token itself: FACEBOOK_LOGIN is a
+  /// Page token against graph.facebook.com, INSTAGRAM_LOGIN an Instagram user
+  /// token against graph.instagram.com.
+  authType          SocialAuthType @default(FACEBOOK_LOGIN)
   isActive          Boolean        @default(true)
   posts             SocialPost[]
   connectedAt       DateTime       @default(now())

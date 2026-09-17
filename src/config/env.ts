@@ -74,6 +74,12 @@ const envSchema = z.object({
   // own Permissions screen is where the real list is.
   META_OAUTH_SCOPES: optionalString(),
 
+  // The Instagram product's OWN id and secret — not the Facebook app's, which
+  // sit on a different page and look the same. Setting these switches /connect
+  // to the Instagram Login path, which needs no Facebook Page at all.
+  INSTAGRAM_APP_ID: optionalString(),
+  INSTAGRAM_APP_SECRET: optionalString(),
+
   // Website. Content goes into Sanity, which the Next.js site renders from;
   // anything needing real code goes to GitHub as an issue instead.
   SANITY_PROJECT_ID: optionalString(),

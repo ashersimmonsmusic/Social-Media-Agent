@@ -1,4 +1,4 @@
-import type { SocialPlatform } from "@prisma/client";
+import type { SocialAuthType, SocialPlatform } from "@prisma/client";
 
 /** A post as the rest of the system describes it, before any platform specifics. */
 export interface DraftPost {
@@ -34,6 +34,12 @@ export interface ConnectedAccount {
   platformAccountId: string;
   /** Decrypted only in memory, at the point of use. Never logged. */
   accessToken: string;
+  /**
+   * Which Instagram API this token belongs to. The two are served by different
+   * hosts and a token gives no clue which — sending one to the wrong host fails
+   * as an authentication error, naming nothing useful.
+   */
+  authType?: SocialAuthType;
 }
 
 /**

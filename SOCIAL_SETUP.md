@@ -100,6 +100,51 @@ account.** Read what you need off the screen; don't paste the reply anywhere.
 > Railway to match, comma separated, and add any missing permission on that same
 > screen.
 
+## The path that avoids Facebook Pages entirely
+
+Everything above reaches Instagram through a chain: your Facebook user, a role
+on a Page, that Page's link to the Instagram account, all inside the right
+business portfolio. A break anywhere returns an empty list of Pages naming
+nothing — which is indistinguishable from picking the wrong portfolio, from a
+Page you lack a role on, and from a missing Instagram link.
+
+**Instagram Login has no chain.** You log in as the Instagram account and that
+is the account. Use it unless you have a reason not to.
+
+### Setting it up
+
+1. In your app, open the **Instagram** product → **API setup with Instagram
+   login**.
+2. Find the **Instagram app ID** and **Instagram app secret** there.
+
+   These are **not** the Facebook App ID and App Secret from Settings → Basic.
+   They live on a different page, look identical, and silently do not work in
+   each other's place.
+
+3. On that same page, under **Business login settings**, add the redirect URL:
+   ```
+   https://<your-app>.up.railway.app/oauth/instagram/callback
+   ```
+   Note `/oauth/instagram/callback` — a different path from the Facebook one.
+
+4. In Railway:
+   ```
+   INSTAGRAM_APP_ID=<Instagram app ID>
+   INSTAGRAM_APP_SECRET=<Instagram app secret>
+   ```
+
+5. `/connect` in Telegram. It now offers the Instagram login rather than the
+   Facebook one, automatically — no Page, no portfolio, nothing to tick.
+
+### About the 60-day expiry
+
+Instagram Login tokens last 60 days. The bot renews them on its own, roughly
+twice a day, whenever fewer than ten days remain — so this never becomes
+something you do. It only needs the bot to have been running at some point
+inside that window.
+
+---
+
 ## Step 4 — App Review (you almost certainly don't need this)
 
 This step reads as the big blocker and mostly isn't one. **Posting to your own

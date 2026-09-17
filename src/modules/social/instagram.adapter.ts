@@ -28,8 +28,14 @@ export class PublishError extends Error {
   }
 }
 
-function graphUrl(path: string): string {
-  return `https://graph.facebook.com/${env.META_GRAPH_API_VERSION}/${path}`;
+/**
+ * The two Instagram APIs are served by different hosts, and a token only works
+ * against its own. A Page token sent to graph.instagram.com — or the reverse —
+ * fails as an authentication error that names neither the host nor the mix-up.
+ */
+function graphUrl(account: ConnectedAccount, path: string): string {
+  const host = account.authType === "INSTAGRAM_LOGIN" ? "https://graph.instagram.com" : "https://graph.facebook.com";
+  return `${host}/${env.META_GRAPH_API_VERSION}/${path}`;
 }
 
 /**
@@ -135,7 +141,7 @@ export class InstagramAdapter implements SocialPlatformAdapter {
       caption: post.caption,
       access_token: account.accessToken,
     });
-    const json = await postForm(graphUrl(`${account.platformAccountId}/media`), body, "create the media container");
+    const json = await postForm(graphUrl(account, `${account.platformAccountId}/media`), body, "create the media container");
     const id = typeof json.id === "string" ? json.id : "";
     if (!id) throw new PublishError("Instagram accepted the media but returned no container id.");
     return id;
@@ -155,7 +161,7 @@ export class InstagramAdapter implements SocialPlatformAdapter {
       await sleep(delay);
 
       const json = await getJson(
-        graphUrl(containerId),
+        graphUrl(account, containerId),
         { fields: "status_code,status", access_token: account.accessToken },
         "check whether the video finished uploading",
       );
@@ -188,7 +194,7 @@ export class InstagramAdapter implements SocialPlatformAdapter {
 
   private async publishContainer(account: ConnectedAccount, containerId: string): Promise<string> {
     const body = new URLSearchParams({ creation_id: containerId, access_token: account.accessToken });
-    const json = await postForm(graphUrl(`${account.platformAccountId}/media_publish`), body, "publish the post");
+    const json = await postForm(graphUrl(account, `${account.platformAccountId}/media_publish`), body, "publish the post");
     const id = typeof json.id === "string" ? json.id : "";
     if (!id) throw new PublishError("Instagram published the container but returned no post id.");
     return id;

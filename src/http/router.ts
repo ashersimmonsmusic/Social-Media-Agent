@@ -9,6 +9,10 @@ import {
   completeConnection as completeMetaConnection,
   verifyMetaState,
 } from "../modules/oauth/meta.service.js";
+import {
+  completeConnection as completeInstagramConnection,
+  verifyInstagramState,
+} from "../modules/oauth/instagramLogin.service.js";
 import { logger } from "../lib/logger.js";
 
 export const router = Router();
@@ -162,6 +166,38 @@ router.get("/oauth/meta/callback", async (req, res) => {
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     logger.error("oauth.meta_callback_failed", { error: detail });
+    res.status(500).send(`Couldn't finish connecting: ${detail}`);
+  }
+});
+
+/**
+ * Where Instagram sends Asher back after he approves. Separate from the Meta
+ * callback because it is a different API with its own app credentials — the two
+ * flows share nothing but the shape.
+ */
+router.get("/oauth/instagram/callback", async (req, res) => {
+  const code = typeof req.query.code === "string" ? req.query.code : "";
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const error = typeof req.query.error_description === "string" ? req.query.error_description : "";
+
+  if (error) {
+    res.status(400).send(`Instagram reported: ${error}. Nothing was connected.`);
+    return;
+  }
+  if (!code || !verifyInstagramState(state)) {
+    res.status(403).send("That link is invalid or has expired. Run /connect in Telegram for a fresh one.");
+    return;
+  }
+
+  try {
+    const account = await completeInstagramConnection(code);
+    res.send(
+      `Instagram connected${account.username ? ` as @${account.username}` : ""}. ` +
+        `You can close this tab and go back to Telegram.`,
+    );
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    logger.error("oauth.instagram_callback_failed", { error: detail });
     res.status(500).send(`Couldn't finish connecting: ${detail}`);
   }
 });

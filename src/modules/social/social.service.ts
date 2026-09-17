@@ -1,4 +1,4 @@
-import type { SocialPlatform } from "@prisma/client";
+import type { SocialAuthType, SocialPlatform } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { signedMediaUrl } from "../../lib/signedMedia.js";
 import { decryptToken, encryptToken } from "../../lib/tokenCrypto.js";
@@ -36,6 +36,8 @@ export async function connectAccount(input: {
   username?: string;
   accessToken: string;
   tokenExpiresAt?: Date;
+  /** Which API the token belongs to. Defaults to the Facebook Page route. */
+  authType?: SocialAuthType;
 }) {
   adapterFor(input.platform); // reject a platform we can't actually post to
   const accessToken = encryptToken(input.accessToken);
@@ -50,8 +52,15 @@ export async function connectAccount(input: {
       username: input.username,
       accessToken,
       tokenExpiresAt: input.tokenExpiresAt,
+      authType: input.authType ?? "FACEBOOK_LOGIN",
     },
-    update: { accessToken, username: input.username, tokenExpiresAt: input.tokenExpiresAt, isActive: true },
+    update: {
+      accessToken,
+      username: input.username,
+      tokenExpiresAt: input.tokenExpiresAt,
+      authType: input.authType ?? "FACEBOOK_LOGIN",
+      isActive: true,
+    },
   });
 
   // Deliberately records no token material, not even a hint.
@@ -99,6 +108,7 @@ export async function activeAccountFor(platform: SocialPlatform): Promise<{ id: 
       platform: account.platform,
       platformAccountId: account.platformAccountId,
       accessToken: decryptToken(account.accessToken),
+      authType: account.authType,
     },
   };
 }
