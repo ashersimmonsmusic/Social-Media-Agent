@@ -148,6 +148,31 @@ export const AGENT_TOOLS: AgentTool[] = [
     inputSchema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "draft_captions",
+    description:
+      "Write three caption options for a post, each with a different hook and a different angle. Use this rather " +
+      "than writing a caption yourself — it applies Asher's voice rules and the things he never says, and it pulls " +
+      "in real facts about him so the copy uses his actual detail instead of invented colour. For a photo, call " +
+      "look_at_image first and pass what you saw. For a clip made with prepare_video_for_reels, pass the " +
+      "description it returned. Always show him all three and let him choose; never pick one for him.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        brief: {
+          type: "string",
+          description:
+            "What the post is about, in his words. Everything not visible comes from here, so if he hasn't said " +
+            "what's in it, ask him before calling this.",
+        },
+        what_it_shows: {
+          type: "string",
+          description: "What the photo or the clip's stills actually show, if there's media.",
+        },
+      },
+      required: ["brief"],
+    },
+  },
+  {
     name: "rename_drive_video",
     description:
       "Rename one of Asher's videos in Google Drive so the file says what it is. Footage off a camera or phone " +

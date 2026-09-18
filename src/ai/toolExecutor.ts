@@ -4,6 +4,7 @@ import { signedMediaUrl, MediaUrlUnavailableError } from "../lib/signedMedia.js"
 import { prepareVideoForReels, formatPreparedVideo } from "../modules/video/video.service.js";
 import type { ReframeMode } from "../modules/video/reframe.service.js";
 import { describeImageForCaption } from "../modules/knowledge/attachment.service.js";
+import { draftCaptions, renderCaption } from "../modules/content/caption.service.js";
 import { storage } from "../storage/index.js";
 import { listKnowledge, searchKnowledge } from "../modules/knowledge/knowledge.service.js";
 import { getOrCreateBrandProfile, listActiveBrandRules } from "../modules/brand/brand.service.js";
@@ -260,6 +261,26 @@ export function buildToolExecutor(telegram: Telegram) {
           return formatVideoList(await listVideos(15));
         } catch (error) {
           return error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      case "draft_captions": {
+        const args = input as { brief?: string; what_it_shows?: string };
+        const brief = args.brief?.trim();
+        if (!brief) return "I need to know what the post is about before I can write anything for it.";
+
+        try {
+          const options = await draftCaptions({ brief, whatItShows: args.what_it_shows });
+          if (options.length === 0) {
+            return "I couldn't draft anything usable from that. Tell me a bit more about what the post is about.";
+          }
+          return options
+            .map((option, index) => `OPTION ${index + 1}\n${renderCaption(option)}`)
+            .join("\n\n———\n\n");
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          logger.error("tool.draft_captions_failed", { error: detail });
+          return `I couldn't draft captions: ${detail}`;
         }
       }
 

@@ -8,6 +8,7 @@ import { recordAudit } from "../audit/audit.service.js";
 import { downloadToFile, formatDuration, getVideo } from "../drive/drive.service.js";
 import {
   assertRoomFor,
+  extractFrames,
   probe,
   renderVertical,
   withTempDir,
@@ -16,6 +17,10 @@ import {
   type ReframePlan,
 } from "./ffmpeg.js";
 import { decideReframe, type ReframeMode } from "./reframe.service.js";
+import { describeClipFromFrames } from "../content/caption.service.js";
+
+/** Enough stills to tell whether a subject moves, and what is in shot. */
+const FRAMES_TO_SAMPLE = 6;
 
 export interface PrepareVideoInput {
   driveFileId: string;
@@ -27,6 +32,8 @@ export interface PrepareVideoInput {
 
 export interface PreparedVideo {
   assetId: string;
+  /** What the stills show, so a caption can be written without watching it. */
+  whatItShows?: string;
   filename: string;
   sourceName: string;
   sourceShape: string;
@@ -81,7 +88,30 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
     const available = probed.durationSeconds - startSeconds;
     const trimmed = available > REELS_MAX_SECONDS;
 
-    const decision = await decideReframe(sourcePath, probed, input.mode ?? "auto");
+    // Extracted once and shared: the reframe asks where the subject is, the
+    // description asks what's in shot, and running ffmpeg over the clip twice
+    // for the same stills would double the slowest part of this.
+    let frames: Buffer[] | null = null;
+    const getFrames = async () => {
+      frames ??= await extractFrames(sourcePath, probed.durationSeconds, FRAMES_TO_SAMPLE);
+      return frames;
+    };
+
+    const decision = await decideReframe(probed, input.mode ?? "auto", getFrames);
+
+    // What the clip shows, so a caption can be written against something real
+    // rather than the filename. Never fatal: a clip without a description is
+    // still a clip, and he can say what's in it himself.
+    let whatItShows: string | undefined;
+    try {
+      whatItShows = await describeClipFromFrames(
+        await getFrames(),
+        `${probed.width}x${probed.height}`,
+      );
+    } catch (error) {
+      logger.warn("video.describe_failed", { error: String(error) });
+    }
+
     await renderVertical(sourcePath, outputPath, decision.plan, probed, {
       startSeconds,
       sourceBytes: meta.sizeBytes,
@@ -95,9 +125,10 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
       mimeType: "video/mp4",
       data: rendered,
       source: `Google Drive: ${meta.name}`,
-      description:
-        `Vertical 9:16 cut of ${meta.name}` +
-        (decision.observations.length > 0 ? ` — ${decision.observations.slice(0, 3).join("; ")}` : ""),
+      description: whatItShows
+        ? `Vertical 9:16 cut of ${meta.name}. ${whatItShows}`
+        : `Vertical 9:16 cut of ${meta.name}` +
+          (decision.observations.length > 0 ? ` — ${decision.observations.slice(0, 3).join("; ")}` : ""),
     });
 
     const outputSeconds = Math.min(REELS_MAX_SECONDS, available);
@@ -138,6 +169,7 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
 
     return {
       assetId: asset.id,
+      whatItShows,
       filename: asset.filename,
       sourceName: meta.name,
       sourceShape: `${probed.width}x${probed.height}`,

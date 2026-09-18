@@ -2,7 +2,6 @@ import { aiService } from "../../ai/AIService.js";
 import { logger } from "../../lib/logger.js";
 import {
   cropOffsetFor,
-  extractFrames,
   TARGET_HEIGHT,
   TARGET_WIDTH,
   verticalSliceWidth,
@@ -23,7 +22,6 @@ const MAX_SUBJECT_DRIFT_PERCENT = 18;
 /** Within this of 9:16, footage is already vertical and needs no reframing. */
 const VERTICAL_TOLERANCE = 0.05;
 
-const FRAMES_TO_SAMPLE = 6;
 
 export type ReframeMode = "auto" | "crop" | "blur";
 
@@ -154,9 +152,11 @@ export function planFromReadings(readings: FrameReading[], probed: VideoProbe): 
  * audience sees: it only ever looks plainer than it could have.
  */
 export async function decideReframe(
-  path: string,
   probed: VideoProbe,
-  mode: ReframeMode = "auto",
+  mode: ReframeMode,
+  // Supplied rather than extracted here, so the caller can hand the same stills
+  // to the caption writer instead of running ffmpeg over the clip twice.
+  getFrames: () => Promise<Buffer[]>,
 ): Promise<ReframeDecision> {
   if (isAlreadyVertical(probed)) {
     return {
@@ -186,7 +186,7 @@ export async function decideReframe(
 
   let readings: FrameReading[] = [];
   try {
-    const frames = await extractFrames(path, probed.durationSeconds, FRAMES_TO_SAMPLE);
+    const frames = await getFrames();
     const result = await aiService.generate("VISION", `This clip is ${probed.width}x${probed.height}, ${probed.durationSeconds.toFixed(1)} seconds long. ${frames.length} stills follow, in order.`, {
       system: FRAME_PROMPT,
       maxTokens: 1024,
