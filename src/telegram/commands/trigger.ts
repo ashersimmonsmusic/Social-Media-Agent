@@ -29,6 +29,8 @@ export const COMMANDS: { command: string; description: string }[] = [
   { command: "drive", description: "Connect Google Drive so I can see your videos" },
   { command: "videos", description: "What video footage you have" },
   { command: "reel", description: "Turn a Drive video into a vertical Reel clip" },
+  { command: "analyse", description: "Find the best moments in a long video" },
+  { command: "clips", description: "Review the clips I found" },
   { command: "drivedisconnect", description: "Disconnect Google Drive" },
   { command: "newsletter", description: "Email list status, and send one" },
   { command: "stats", description: "How things are going — posts, subscribers, sales" },

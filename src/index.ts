@@ -10,6 +10,7 @@ import { runPolling } from "./telegram/polling.js";
 import { startDriveWatch, stopDriveWatch } from "./modules/drive/driveHealth.js";
 import { startTokenRefresh, stopTokenRefresh } from "./modules/social/tokenRefresh.js";
 import { startRetention, stopRetention } from "./modules/video/retention.js";
+import { startClippingWorker, stopClippingWorker } from "./modules/clipping/job.service.js";
 
 async function main() {
   const app = express();
@@ -57,6 +58,7 @@ async function main() {
   startDriveWatch(bot.telegram);
   startTokenRefresh();
   if (env.VIDEO_RETENTION_DAYS > 0) startRetention();
+  startClippingWorker(bot.telegram);
 
   app.listen(env.PORT, () => {
     logger.info("http.listening", { port: env.PORT, dryRun: env.DRY_RUN });
@@ -67,6 +69,7 @@ async function main() {
     stopDriveWatch();
     stopTokenRefresh();
     stopRetention();
+    stopClippingWorker();
     bot.stop("SIGINT");
   });
   process.once("SIGTERM", () => {
@@ -74,6 +77,7 @@ async function main() {
     stopDriveWatch();
     stopTokenRefresh();
     stopRetention();
+    stopClippingWorker();
     bot.stop("SIGTERM");
   });
 }

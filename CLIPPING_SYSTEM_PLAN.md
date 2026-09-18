@@ -196,7 +196,28 @@ still have something better than today.
 
 ---
 
-## 8. What I need from you
+## 8. Progress
+
+| Step | State |
+|---|---|
+| 1. Volume at 5GB | Done — yours |
+| 2. Tables, status machine, resumable worker | Done |
+| 3. Transcribe a long video, store segments | Done |
+| 4. Moment detection, scoring, dedupe, ranking | Done |
+| 5. Cutting on sentence boundaries | Done |
+| 6. Telegram review — list, previews, select, reject | Done |
+| 7. Titles, hooks, captions per clip | Next |
+| 8. Selected clips into the publishing flow | Next |
+| 9. Decision tracking | Recording now, not yet read |
+| 10. Platform recommendation | Done — per clip, from the ranking pass |
+
+### Answered
+
+- Volume: grown to 5GB.
+- Review surface: Telegram.
+- YouTube: export from Studio into Drive, no automated downloading.
+
+## 9. Original questions
 
 1. **Grow the volume to 5GB** (or tell me the plan won't allow it).
 2. **Telegram-only review, or a web dashboard too?** Recommend Telegram first.
