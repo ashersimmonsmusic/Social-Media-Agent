@@ -206,8 +206,8 @@ still have something better than today.
 | 4. Moment detection, scoring, dedupe, ranking | Done |
 | 5. Cutting on sentence boundaries | Done |
 | 6. Telegram review — list, previews, select, reject | Done |
-| 7. Titles, hooks, captions per clip | Next |
-| 8. Selected clips into the publishing flow | Next |
+| 7. Titles, hooks, captions per clip | Done |
+| 8. Selected clips into the publishing flow | Done — no new publishing path |
 | 9. Decision tracking | Recording now, not yet read |
 | 10. Platform recommendation | Done — per clip, from the ranking pass |
 

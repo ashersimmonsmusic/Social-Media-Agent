@@ -13,6 +13,7 @@ import {
   selectionSummary,
   type SortBy,
 } from "../../modules/clipping/review.service.js";
+import { captionsForClip, readyToPublish, ClipNotReadyError } from "../../modules/clipping/publish.service.js";
 import { sendVideoPreview } from "../notify.js";
 import { commandTrigger } from "./trigger.js";
 
@@ -87,6 +88,55 @@ export function registerClipCommands(bot: Telegraf) {
       const done: number[] = [];
       for (const rank of ranks) if (await decideClip(rank, "SELECTED")) done.push(rank);
       await ctx.reply(done.length > 0 ? `Selected ${done.join(", ")}.` : "I couldn't find those.");
+      return;
+    }
+
+    if (first === "caption") {
+      const rank = Number(second);
+      if (!Number.isFinite(rank)) {
+        await ctx.reply("Which one? /clips caption 1");
+        return;
+      }
+      await ctx.sendChatAction("typing");
+      try {
+        const { title, rendered } = await captionsForClip(rank);
+        if (rendered.length === 0) {
+          await ctx.reply(`I couldn't draft anything usable for "${title}".`);
+          return;
+        }
+        await ctx.reply(
+          [`CAPTIONS FOR "${title}"`, "", ...rendered.map((text, index) => `${index + 1}.\n${text}`)].join(
+            "\n\n———\n\n",
+          ).slice(0, 4000),
+        );
+      } catch (error) {
+        await ctx.reply(
+          error instanceof ClipNotReadyError
+            ? error.message
+            : `I couldn't write captions for that: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      return;
+    }
+
+    if (first === "selected") {
+      const { ready, needCutting } = await readyToPublish();
+      if (ready.length === 0 && needCutting.length === 0) {
+        await ctx.reply("You haven't selected any yet. /clips to look through them.");
+        return;
+      }
+      await ctx.reply(
+        [
+          "SELECTED CLIPS",
+          "",
+          ...ready.map((clip) => `${String(clip.rank).padStart(2, "0")} — ${clip.title} — ready to post`),
+          ...needCutting.map(
+            (clip) => `${String(clip.rank).padStart(2, "0")} — ${clip.title} — not cut yet, ask me and I'll render it`,
+          ),
+          "",
+          "Ask me for a caption — 'caption clip 1' — then I'll put it in front of you to approve like any other post.",
+        ].join("\n"),
+      );
       return;
     }
 
@@ -165,7 +215,7 @@ async function showClips(ctx: Context, sortBy: SortBy): Promise<void> {
       summary ? `${summary.selected} selected · ${summary.rejected} rejected · ${summary.pending} undecided` : "",
       "",
       "/clips select 1 3 · /clips reject 2 · /clips select top 3",
-      "Sort: /clips duration · /clips topic · /clips newest",
+      "/clips caption 1 · /clips selected · sort: duration, topic, newest",
     ]
       .filter(Boolean)
       .join("\n"),

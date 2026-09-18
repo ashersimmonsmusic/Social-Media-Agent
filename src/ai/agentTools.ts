@@ -148,6 +148,27 @@ export const AGENT_TOOLS: AgentTool[] = [
     inputSchema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "list_clips",
+    description:
+      "List the clips found in the most recently analysed long video, best first — title, score, length, what's said " +
+      "in each, and whether Asher has selected or rejected it. Use when he asks what you found, which clips are " +
+      "worth posting, or what's left to decide on. Scores rank clips against each other; they are not a prediction " +
+      "that anything will perform, so never describe them as one.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "caption_clip",
+    description:
+      "Write caption options for one clip he has found, using what is actually said in it. Give the clip's rank " +
+      "number from list_clips. Better than draft_captions for a clip, because it already has the transcript — he " +
+      "doesn't have to retype what's in it. Show him all three options and let him pick.",
+    inputSchema: {
+      type: "object",
+      properties: { rank: { type: "number", description: "The clip's number in the list." } },
+      required: ["rank"],
+    },
+  },
+  {
     name: "draft_captions",
     description:
       "Write three caption options for a post, each with a different hook and a different angle. Use this rather " +

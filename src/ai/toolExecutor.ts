@@ -5,6 +5,8 @@ import { prepareVideoForReels, formatPreparedVideo } from "../modules/video/vide
 import type { ReframeMode } from "../modules/video/reframe.service.js";
 import { describeImageForCaption } from "../modules/knowledge/attachment.service.js";
 import { draftCaptions, renderCaption } from "../modules/content/caption.service.js";
+import { captionsForClip, ClipNotReadyError } from "../modules/clipping/publish.service.js";
+import { listClips, formatClip } from "../modules/clipping/review.service.js";
 import { storage } from "../storage/index.js";
 import { listKnowledge, searchKnowledge } from "../modules/knowledge/knowledge.service.js";
 import { getOrCreateBrandProfile, listActiveBrandRules } from "../modules/brand/brand.service.js";
@@ -261,6 +263,37 @@ export function buildToolExecutor(telegram: Telegram) {
           return formatVideoList(await listVideos(15));
         } catch (error) {
           return error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      case "list_clips": {
+        const clips = await listClips({ sortBy: "score" });
+        if (clips.length === 0) {
+          return "No clips yet — nothing has been analysed, or everything found was rejected.";
+        }
+        return clips
+          .slice(0, 10)
+          .map((clip) => formatClip(clip))
+          .join("\n\n———\n\n");
+      }
+
+      case "caption_clip": {
+        const rank = Number((input as { rank?: unknown }).rank);
+        if (!Number.isFinite(rank)) return "Which clip? Give me its number from list_clips.";
+
+        try {
+          const { title, rendered } = await captionsForClip(rank);
+          if (rendered.length === 0) return `I couldn't draft anything usable for "${title}".`;
+          return [
+            `Caption options for "${title}":`,
+            "",
+            ...rendered.map((text, index) => `OPTION ${index + 1}\n${text}`),
+          ].join("\n\n———\n\n");
+        } catch (error) {
+          if (error instanceof ClipNotReadyError) return error.message;
+          const detail = error instanceof Error ? error.message : String(error);
+          logger.error("tool.caption_clip_failed", { error: detail });
+          return `I couldn't write captions for that clip: ${detail}`;
         }
       }
 
