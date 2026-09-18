@@ -23,7 +23,14 @@ import { VideoToolError } from "../../modules/video/ffmpeg.js";
 import type { ReframeMode } from "../../modules/video/reframe.service.js";
 import { sendVideoPreview } from "../notify.js";
 import { setAwaitingRename, takeAwaitingRename } from "../editState.js";
-import { suggestName, looksUnnamed, NamingError } from "../../modules/drive/naming.service.js";
+import { suggestName, NamingError } from "../../modules/drive/naming.service.js";
+import {
+  applyBatchRename,
+  formatPlan,
+  planBatchRename,
+  undoLastBatchRename,
+  type RenamePlanEntry,
+} from "../../modules/drive/batchRename.service.js";
 import { storage } from "../../storage/index.js";
 import { getAsset } from "../../modules/assets/asset.service.js";
 import { logger } from "../../lib/logger.js";
@@ -121,6 +128,53 @@ export function registerDriveCommands(bot: Telegraf) {
   bot.command(commandTrigger("rename"), async (ctx) => {
     const payload = ctx.payload.trim();
 
+    if (/^undo$/i.test(payload)) {
+      await ctx.sendChatAction("typing");
+      const result = await undoLastBatchRename();
+      await ctx.reply(
+        !result
+          ? "I haven't done a batch rename to undo."
+          : result.failed > 0
+            ? `Put ${result.restored} back. ${result.failed} wouldn't revert — check them in Drive.`
+            : `Put all ${result.restored} back to what they were called.`,
+      );
+      return;
+    }
+
+    if (/^all(\s+deep)?$/i.test(payload)) {
+      const deep = /deep/i.test(payload);
+      await ctx.reply(
+        deep
+          ? "Going through them properly — I'll download the ones nothing has read. This takes a few minutes."
+          : "Having a look at what I can name…",
+      );
+
+      try {
+        await ctx.sendChatAction("typing");
+        const plan = await planBatchRename(deep);
+
+        if (plan.entries.length === 0) {
+          await ctx.reply(formatPlan(plan));
+          return;
+        }
+
+        // The whole list first. Renaming fifteen files is the largest change
+        // the bot can make to his Drive and it should never be a surprise.
+        pendingPlans.set(String(ctx.chat?.id ?? ""), plan.entries);
+        await ctx.reply(formatPlan(plan).slice(0, 3800), {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: `Rename all ${plan.entries.length}`, callback_data: "rnb:apply" }],
+              [{ text: "Leave them", callback_data: "rnb:cancel" }],
+            ],
+          },
+        });
+      } catch (error) {
+        await replyWithDriveError(ctx, error, "rename.batch_failed");
+      }
+      return;
+    }
+
     // "/rename <id> <name>" in one go, for when he already has the id.
     const direct = /^(\S+)\s+(.+)$/.exec(payload);
     if (direct) {
@@ -140,7 +194,7 @@ export function registerDriveCommands(bot: Telegraf) {
       // A list to tap, for the same reason /videos has one: transcribing a
       // 33-character Drive id from one message into another is where this
       // stops being used.
-      await ctx.reply("Which one should I rename?", {
+      await ctx.reply("Which one should I rename?\n\n/rename all — do the whole folder · /rename undo — put it back", {
         reply_markup: {
           inline_keyboard: videos.map((video: DriveVideo) => [
             { text: videoButtonLabel(video), callback_data: `rn:${video.id}` },
@@ -390,5 +444,53 @@ export function registerRenameCallbacks(bot: Telegraf) {
       return;
     }
     await applyRename(ctx, fileId, pending.currentName);
+  });
+}
+
+/**
+ * The batch each chat has been shown but not yet agreed to.
+ *
+ * Held in memory like the other pending-reply state: if the process restarts
+ * before he taps, nothing has happened to his Drive and he runs the command
+ * again. Persisting a proposal would be more machinery than the risk warrants.
+ */
+const pendingPlans = new Map<string, RenamePlanEntry[]>();
+
+/** Handles agreeing to, or walking away from, a proposed batch. */
+export function registerBatchRenameCallbacks(bot: Telegraf) {
+  bot.on("callback_query", async (ctx, next) => {
+    const data = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+    if (!data || !data.startsWith("rnb:")) return next();
+
+    const chatId = String(ctx.chat?.id ?? "");
+    const entries = pendingPlans.get(chatId);
+    pendingPlans.delete(chatId);
+    await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+
+    if (data === "rnb:cancel") {
+      await ctx.answerCbQuery("Left alone");
+      await ctx.reply("Left them as they are.");
+      return;
+    }
+
+    if (!entries || entries.length === 0) {
+      await ctx.answerCbQuery();
+      await ctx.reply("That plan has gone — send /rename all again.");
+      return;
+    }
+
+    await ctx.answerCbQuery("Renaming…");
+    const result = await applyBatchRename(entries);
+
+    await ctx.reply(
+      [
+        result.renamed.length > 0 ? `Renamed ${result.renamed.length}.` : "Nothing renamed.",
+        ...(result.failed.length > 0
+          ? ["", "Wouldn't rename:", ...result.failed.map((failure) => `• ${failure.from} — ${failure.reason}`)]
+          : []),
+        "",
+        "/rename undo puts them all back if you don't like them.",
+      ].join("\n"),
+    );
   });
 }

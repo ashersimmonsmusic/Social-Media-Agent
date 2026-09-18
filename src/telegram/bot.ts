@@ -17,7 +17,12 @@ import { registerSocialCommands } from "./commands/social.js";
 import { registerWebsiteCommands } from "./commands/website.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerNewsletterCommand } from "./commands/newsletter.js";
-import { registerDriveCommands, registerDriveCallbacks, registerRenameCallbacks } from "./commands/drive.js";
+import {
+  registerDriveCommands,
+  registerDriveCallbacks,
+  registerRenameCallbacks,
+  registerBatchRenameCallbacks,
+} from "./commands/drive.js";
 import {
   registerClipCommands,
   registerClipCallbacks,
@@ -64,6 +69,7 @@ export function createBot(): Telegraf {
   registerDriveCommands(bot);
   registerDriveCallbacks(bot);
   registerRenameCallbacks(bot);
+  registerBatchRenameCallbacks(bot);
   registerClipCommands(bot);
   registerClipCallbacks(bot);
   registerAnalysisRenameCallback(bot);

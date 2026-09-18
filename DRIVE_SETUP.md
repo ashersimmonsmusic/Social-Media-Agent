@@ -262,8 +262,18 @@ Drop clips into that folder. Then send:
 
 You get a tappable list. Tap a clip and it comes back vertical, ready to watch.
 
-`/rename` gives you the same tappable list, and offers to work out a name from
-the footage itself — free once a video has been analysed, since it already has
+`/rename all` goes through the whole folder: it suggests a name for everything
+still called `00066.MTS` or `IMG_4821.mp4`, shows you the complete list of
+old → new, and changes nothing until you agree. `/rename undo` puts the whole
+batch back.
+
+Naming a video is free once it has been analysed, and costs a download when
+nothing has read it — so the free ones are done by default and the rest are
+quoted, with the MB, before anything is fetched. `/rename all deep` if you want
+those too.
+
+`/rename` on its own gives you the same tappable list, and offers to work out a
+name from the footage itself — free once a video has been analysed, since it already has
 the transcript. It suggests; you tap to accept or type your own.
 
 You can also ask in plain words — *"rename that first one to Louisiana live
