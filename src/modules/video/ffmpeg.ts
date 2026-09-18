@@ -61,6 +61,32 @@ export type ReframePlan =
   | { strategy: "blur" }
   | { strategy: "passthrough" };
 
+/**
+ * A music track to sit under a clip.
+ *
+ * Instagram's own catalogue cannot be reached from the publishing API at all, so
+ * the only way a post has music is if the music is already in the file. That
+ * makes this the real feature rather than a convenience: the bed is mixed in
+ * before the clip is ever uploaded.
+ */
+export interface MusicBed {
+  /** An audio file on disk. Looped if it is shorter than the clip. */
+  path: string;
+  /**
+   * How loud the bed sits, in decibels relative to the file's own level.
+   * Negative is quieter, which is nearly always what a bed wants.
+   */
+  gainDb: number;
+  /** Where in the track to start, so a bed can open on the good bar rather than the intro. */
+  startSeconds?: number;
+  /**
+   * Push the bed down while the source audio is loud. Pointless when the source
+   * is silent — there is nothing to duck under — and wrong when the source is
+   * ambience rather than a voice, so it is a decision rather than a default.
+   */
+  duck?: boolean;
+}
+
 export interface RenderOptions {
   startSeconds?: number;
   durationSeconds?: number;
@@ -68,6 +94,8 @@ export interface RenderOptions {
   sourceBytes?: number;
   /** An .ass file to burn into the picture. Applied last, over the finished frame. */
   subtitlePath?: string;
+  /** Music to mix in under the clip's own audio. */
+  music?: MusicBed;
 }
 
 /**
@@ -245,7 +273,18 @@ export function cropOffsetFor(width: number, cropWidth: number, centrePercent: n
   return evenOffset(Math.max(0, Math.min(width - cropWidth, raw)));
 }
 
-function filterFor(plan: ReframePlan, subtitlePath?: string): { args: string[]; label: string } {
+/**
+ * How the video reaches the output.
+ *
+ * `chain` is a plain list of filters that can go straight into `-vf`; `graph`
+ * has named pads and needs `-filter_complex`. The distinction matters because a
+ * music bed forces the whole thing into a complex graph — an audio graph and a
+ * `-vf` cannot both feed the same output — and only then does a chain need
+ * wrapping.
+ */
+type VideoFilter = { kind: "chain"; chain: string } | { kind: "graph"; graph: string };
+
+function videoFilter(plan: ReframePlan, subtitlePath?: string): VideoFilter {
   // Burned in last, over the finished vertical frame — applying it before the
   // crop or scale would stretch the text along with the picture.
   const subs = subtitlePath ? `,subtitles='${escapeFilterPath(subtitlePath)}'` : "";
@@ -253,39 +292,96 @@ function filterFor(plan: ReframePlan, subtitlePath?: string): { args: string[]; 
   switch (plan.strategy) {
     case "crop":
       return {
-        args: [
-          "-vf",
-          `crop=${plan.cropWidth}:ih:${plan.cropX}:0,scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:flags=lanczos${subs}`,
-        ],
-        label: "-vf",
+        kind: "chain",
+        chain: `crop=${plan.cropWidth}:ih:${plan.cropX}:0,scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:flags=lanczos${subs}`,
       };
     case "blur":
       // The background is the same footage enlarged to fill the frame and
       // blurred; the real picture sits on top at full width. Nothing is cut.
       return {
-        args: [
-          "-filter_complex",
+        kind: "graph",
+        graph:
           `[0:v]split=2[bg][fg];` +
-            `[bg]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=increase,` +
-            `crop=${TARGET_WIDTH}:${TARGET_HEIGHT},gblur=sigma=24[blurred];` +
-            `[fg]scale=${TARGET_WIDTH}:-2[front];` +
-            `[blurred][front]overlay=(W-w)/2:(H-h)/2${subtitlePath ? "[composited]" : "[v]"}` +
-            (subtitlePath ? `;[composited]subtitles='${escapeFilterPath(subtitlePath)}'[v]` : ""),
-          "-map",
-          "[v]",
-        ],
-        label: "-filter_complex",
+          `[bg]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=increase,` +
+          `crop=${TARGET_WIDTH}:${TARGET_HEIGHT},gblur=sigma=24[blurred];` +
+          `[fg]scale=${TARGET_WIDTH}:-2[front];` +
+          `[blurred][front]overlay=(W-w)/2:(H-h)/2${subtitlePath ? "[composited]" : "[v]"}` +
+          (subtitlePath ? `;[composited]subtitles='${escapeFilterPath(subtitlePath)}'[v]` : ""),
       };
     case "passthrough":
       return {
-        args: [
-          "-vf",
+        kind: "chain",
+        chain:
           `scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=decrease,` +
-            `pad=${TARGET_WIDTH}:${TARGET_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black${subs}`,
-        ],
-        label: "-vf",
+          `pad=${TARGET_WIDTH}:${TARGET_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black${subs}`,
       };
   }
+}
+
+/** Long enough not to sound like a cut, short enough not to waste the opening bar. */
+const BED_FADE_IN_SECONDS = 0.75;
+/** Longer than the fade in: a bed that stops dead reads as a mistake. */
+const BED_FADE_OUT_SECONDS = 1.5;
+
+/**
+ * How hard the bed gets pushed down while there is speech.
+ *
+ * The threshold is measured on the voice, not the music, and is a linear
+ * amplitude rather than decibels — 0.03 is roughly -30dBFS, which is quiet
+ * enough to catch a normal speaking level without room tone triggering it.
+ * Measured against a full-scale tone these settings pull the bed down about
+ * 10dB while the voice is present; raising the ratio further adds barely a
+ * decibel, and raising the threshold to 0.1 loses almost all of it.
+ */
+const DUCK_THRESHOLD = 0.03;
+const DUCK_RATIO = 6;
+const DUCK_ATTACK_MS = 15;
+/** Slow enough that the bed doesn't pump back up between words. */
+const DUCK_RELEASE_MS = 600;
+
+/** Both streams have to agree on format before they can be mixed. */
+const MIX_FORMAT = "aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo";
+
+/**
+ * The audio half of the filter graph, producing `[a]`.
+ *
+ * Exported so a test can read the graph without running an encode: the ducking
+ * is the part most likely to be subtly wrong, and it is far cheaper to assert on
+ * than to listen to.
+ */
+export function audioGraph(bed: MusicBed, hasSourceAudio: boolean, durationSeconds: number): string {
+  const start = Math.max(0, bed.startSeconds ?? 0);
+  // asetpts rebases the timeline to zero after the trim, so the fades below
+  // measure from the start of the clip rather than the start of the track.
+  const trim = start > 0 ? `atrim=start=${start.toFixed(3)},asetpts=N/SR/TB,` : "";
+  const fadeOutAt = Math.max(0, durationSeconds - BED_FADE_OUT_SECONDS);
+
+  const shaped =
+    `${trim}volume=${bed.gainDb.toFixed(1)}dB,` +
+    `afade=t=in:st=0:d=${BED_FADE_IN_SECONDS},` +
+    `afade=t=out:st=${fadeOutAt.toFixed(3)}:d=${BED_FADE_OUT_SECONDS},` +
+    MIX_FORMAT;
+
+  // Nothing to mix against: the bed is the whole soundtrack.
+  if (!hasSourceAudio) return `[1:a]${shaped}[a]`;
+
+  // normalize=0 because amix otherwise divides every input by the number of
+  // inputs, which would quietly halve the voice the moment a bed was added.
+  const mix = `amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]`;
+
+  if (!bed.duck) return `[1:a]${shaped}[bed];[0:a]${MIX_FORMAT}[voice];[voice][bed]${mix}`;
+
+  // The voice is needed twice: once as itself in the mix, once as the key that
+  // pushes the bed down while it is talking. sidechaincompress takes the bed as
+  // its main input and the voice as the trigger, which is the reverse of how it
+  // reads — the thing being compressed comes first.
+  return (
+    `[0:a]${MIX_FORMAT},asplit=2[voice][key];` +
+    `[1:a]${shaped}[bed];` +
+    `[bed][key]sidechaincompress=threshold=${DUCK_THRESHOLD}:ratio=${DUCK_RATIO}:` +
+    `attack=${DUCK_ATTACK_MS}:release=${DUCK_RELEASE_MS}[ducked];` +
+    `[voice][ducked]${mix}`
+  );
 }
 
 /**
@@ -297,22 +393,36 @@ export function renderArgs(input: string, output: string, plan: ReframePlan, pro
   const requested = options.durationSeconds ?? probed.durationSeconds - start;
   const duration = Math.min(REELS_MAX_SECONDS, Math.max(1, requested));
 
-  const filter = filterFor(plan, options.subtitlePath);
+  const video = videoFilter(plan, options.subtitlePath);
+  const bed = options.music;
   const args = ["-hide_banner", "-loglevel", "error", "-y"];
 
   // -ss before -i seeks by keyframe, which is fast and accurate enough here.
   if (start > 0) args.push("-ss", start.toFixed(3));
   args.push("-i", input);
 
-  // Instagram has been known to reject a Reel with no audio track at all, so a
-  // silent one is synthesised rather than leaving the stream absent.
-  if (!probed.hasAudio) {
+  if (bed) {
+    // A track shorter than the clip is looped rather than left to run out
+    // halfway through. -t below is what stops it, so the loop cannot run away.
+    args.push("-stream_loop", "-1", "-i", bed.path);
+  } else if (!probed.hasAudio) {
+    // Instagram has been known to reject a Reel with no audio track at all, so a
+    // silent one is synthesised rather than leaving the stream absent.
     args.push("-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
   }
 
-  args.push(...filter.args);
-  if (filter.label === "-vf") args.push("-map", "0:v:0");
-  args.push("-map", probed.hasAudio ? "0:a:0?" : "1:a:0");
+  if (bed) {
+    // With an audio graph in play the video has to go through the same
+    // -filter_complex: ffmpeg will not accept a -vf alongside it for the same
+    // output. A chain is wrapped rather than rewritten, so the picture is
+    // identical either way.
+    const graph = video.kind === "chain" ? `[0:v]${video.chain}[v]` : video.graph;
+    args.push("-filter_complex", `${graph};${audioGraph(bed, probed.hasAudio, duration)}`, "-map", "[v]", "-map", "[a]");
+  } else if (video.kind === "chain") {
+    args.push("-vf", video.chain, "-map", "0:v:0", "-map", probed.hasAudio ? "0:a:0?" : "1:a:0");
+  } else {
+    args.push("-filter_complex", video.graph, "-map", "[v]", "-map", probed.hasAudio ? "0:a:0?" : "1:a:0");
+  }
 
   args.push(
     "-t", duration.toFixed(3),
@@ -408,9 +518,16 @@ export async function diskReport(dir = workRoot()): Promise<DiskReport> {
   }
 }
 
-/** What a job of this size needs on disk, start to finish. */
-export function spaceNeededFor(sourceBytes: number): number {
-  return sourceBytes + OUTPUT_ALLOWANCE_BYTES + SAFETY_BYTES;
+/**
+ * What a job of this size needs on disk, start to finish.
+ *
+ * `extraBytes` covers anything else the job will fetch alongside the source — a
+ * music track, today. Reserved up front rather than discovered halfway through,
+ * because the failure mode of running out mid-render is a full disk for
+ * everything else in the container, not just a failed clip.
+ */
+export function spaceNeededFor(sourceBytes: number, extraBytes = 0): number {
+  return sourceBytes + Math.max(0, extraBytes) + OUTPUT_ALLOWANCE_BYTES + SAFETY_BYTES;
 }
 
 /**
@@ -419,8 +536,8 @@ export function spaceNeededFor(sourceBytes: number): number {
  * Running the disk to zero fails every other write in the container, not just
  * this one, so the clean refusal is worth the check.
  */
-export async function assertRoomFor(sourceBytes: number, dir = workRoot()): Promise<void> {
-  const needed = spaceNeededFor(sourceBytes);
+export async function assertRoomFor(sourceBytes: number, dir = workRoot(), extraBytes = 0): Promise<void> {
+  const needed = spaceNeededFor(sourceBytes, extraBytes);
   const report = await diskReport(dir);
   // A filesystem that won't report its size is not a reason to refuse work.
   if (report.known && report.freeBytes < needed) {

@@ -132,10 +132,12 @@ export class AssetNotPublishableError extends Error {
  * Always called at publish time, never when a card is raised: a signed link has
  * an hour on it and an approval card can sit for days.
  */
-export async function mediaForAsset(assetId: string): Promise<{ mediaUrl: string; mediaKind: "IMAGE" | "VIDEO" }> {
+export async function mediaForAsset(
+  assetId: string,
+): Promise<{ mediaUrl: string; mediaKind: "IMAGE" | "VIDEO"; audioName?: string }> {
   const asset = await prisma.asset.findUnique({
     where: { id: assetId },
-    select: { mimeType: true, assetType: true, filename: true },
+    select: { mimeType: true, assetType: true, filename: true, metadata: true },
   });
   if (!asset) throw new AssetNotPublishableError(`I can't find asset ${assetId} in your library any more.`);
 
@@ -149,7 +151,18 @@ export async function mediaForAsset(assetId: string): Promise<{ mediaUrl: string
     );
   }
 
-  return { mediaUrl: signedMediaUrl(assetId), mediaKind: isVideo ? "VIDEO" : "IMAGE" };
+  // Written when the clip was rendered rather than worked out now: the music
+  // setting may have changed, and this has to describe the file as it exists.
+  const metadata = (asset.metadata ?? {}) as Record<string, unknown>;
+  const audioName = typeof metadata.audioName === "string" && metadata.audioName !== "" ? metadata.audioName : undefined;
+
+  return {
+    mediaUrl: signedMediaUrl(assetId),
+    mediaKind: isVideo ? "VIDEO" : "IMAGE",
+    // Meaningless on a still, and Instagram rejects an unexpected parameter on
+    // an image container rather than ignoring it.
+    ...(isVideo && audioName ? { audioName } : {}),
+  };
 }
 
 export async function validateForPlatform(platform: SocialPlatform, post: DraftPost): Promise<ValidationResult> {
@@ -167,6 +180,7 @@ export async function publishPost(input: {
   mediaUrl?: string;
   mediaKind?: "IMAGE" | "VIDEO";
   assetId?: string;
+  audioName?: string;
 }) {
   const { id: socialAccountId, connected } = await activeAccountFor(input.platform);
   const adapter = adapterFor(input.platform);
@@ -185,6 +199,7 @@ export async function publishPost(input: {
       caption: input.caption,
       mediaUrl: input.mediaUrl,
       mediaKind: input.mediaKind,
+      audioName: input.audioName,
     });
     return prisma.socialPost.update({
       where: { id: post.id },

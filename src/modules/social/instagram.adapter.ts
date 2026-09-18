@@ -110,6 +110,9 @@ export class InstagramAdapter implements SocialPlatformAdapter {
           captionLength: post.caption.length,
           caption: post.caption,
           mediaUrl: post.mediaUrl,
+          // Recorded so a dry run shows what the Reel's audio would be called —
+          // it can only be set once, so it is worth being able to check it first.
+          audioName: post.audioName,
         },
       });
       logger.info("social.publish_dry_run", { platform: this.platform });
@@ -139,6 +142,9 @@ export class InstagramAdapter implements SocialPlatformAdapter {
       // publishes, and an unqualified video_url is rejected without it.
       ...(isVideo ? { media_type: "REELS", video_url: post.mediaUrl! } : { image_url: post.mediaUrl! }),
       caption: post.caption,
+      // Reels only, and only here: Instagram accepts a name for the Reel's own
+      // audio once, at creation or later from the app, and never afterwards.
+      ...(isVideo && post.audioName ? { audio_name: post.audioName } : {}),
       access_token: account.accessToken,
     });
     const json = await postForm(graphUrl(account, `${account.platformAccountId}/media`), body, "create the media container");

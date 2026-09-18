@@ -246,4 +246,12 @@ describe("spaceNeededFor", () => {
   it("always leaves headroom, even for a tiny file", () => {
     expect(spaceNeededFor(0)).toBeGreaterThan(200 * MB);
   });
+
+  it("reserves room for a music track that will be fetched alongside the source", () => {
+    expect(spaceNeededFor(100 * MB, 80 * MB) - spaceNeededFor(100 * MB)).toBe(80 * MB);
+  });
+
+  it("ignores a nonsensical negative reservation rather than crediting it back", () => {
+    expect(spaceNeededFor(100 * MB, -500 * MB)).toBe(spaceNeededFor(100 * MB));
+  });
 });

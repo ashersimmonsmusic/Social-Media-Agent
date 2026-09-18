@@ -18,6 +18,7 @@ import {
   type ReframePlan,
 } from "./ffmpeg.js";
 import { decideReframe, type ReframeMode } from "./reframe.service.js";
+import { activeBed, audioNameFor, prepareBed, trackTitle } from "../music/music.service.js";
 import { describeClipFromFrames } from "../content/caption.service.js";
 import { buildAss } from "./subtitles.js";
 import { transcriber } from "../transcription/index.js";
@@ -34,6 +35,12 @@ export interface PrepareVideoInput {
   mode?: ReframeMode;
   /** Where in the source clip to start, for footage longer than Instagram allows. */
   startSeconds?: number;
+  /**
+   * Leave out to use whatever /music is set to. False skips the bed for this one
+   * render without changing the setting — the escape hatch for a clip whose own
+   * audio is the point.
+   */
+  music?: boolean;
 }
 
 export interface PreparedVideo {
@@ -55,6 +62,10 @@ export interface PreparedVideo {
   /** Set when the source was longer than Instagram allows and had to be cut. */
   trimmedFromSeconds?: number;
   startSeconds: number;
+  /** The track mixed underneath, when there was one. */
+  musicTrack?: string;
+  /** What Instagram will call this Reel's audio, when it publishes. */
+  audioName?: string;
 }
 
 function slugForOutput(name: string): string {
@@ -83,7 +94,10 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
     // a 2GB file having already fetched it wastes the time and the bandwidth,
     // and leaves the disk full for everything else in the container.
     const { sizeBytes } = await getVideo(input.driveFileId);
-    await assertRoomFor(sizeBytes);
+    // The bed is fetched into the same working directory, so its worst case has
+    // to be reserved now rather than discovered after the source is downloaded.
+    const bedWanted = input.music !== false && (await activeBed()) !== null;
+    await assertRoomFor(sizeBytes, undefined, bedWanted ? env.MUSIC_MAX_TRACK_MB * 1024 * 1024 : 0);
 
     const meta = await downloadToFile(input.driveFileId, sourcePath, maxBytes);
     const probed = await probe(sourcePath);
@@ -156,10 +170,15 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
       }
     }
 
+    // After the probe, because how loud the bed sits and whether it ducks both
+    // depend on whether the footage has its own audio at all.
+    const music = input.music === false ? null : await prepareBed(dir, probed.hasAudio);
+
     await renderVertical(sourcePath, outputPath, decision.plan, probed, {
       startSeconds,
       sourceBytes: meta.sizeBytes,
       subtitlePath,
+      music: music?.bed,
     });
 
     const rendered = await readFile(outputPath);
@@ -170,13 +189,18 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
       mimeType: "video/mp4",
       data: rendered,
       source: `Google Drive: ${meta.name}`,
-      description: whatItShows
-        ? `Vertical 9:16 cut of ${meta.name}. ${whatItShows}`
-        : `Vertical 9:16 cut of ${meta.name}` +
-          (decision.observations.length > 0 ? ` — ${decision.observations.slice(0, 3).join("; ")}` : ""),
+      description:
+        (whatItShows
+          ? `Vertical 9:16 cut of ${meta.name}. ${whatItShows}`
+          : `Vertical 9:16 cut of ${meta.name}` +
+            (decision.observations.length > 0 ? ` — ${decision.observations.slice(0, 3).join("; ")}` : "")) +
+        (music ? ` Music: ${trackTitle(music.name)}.` : ""),
     });
 
     const outputSeconds = Math.min(REELS_MAX_SECONDS, available);
+    // Stored on the asset rather than worked out at publish time, because by then
+    // the track that was mixed in may have been changed or switched off.
+    const audioName = audioNameFor(music?.name);
 
     // Recorded so a later "why does this one have bars?" has an answer, and so
     // the same source isn't re-rendered blindly.
@@ -193,6 +217,8 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
           reframeReason: decision.reason,
           startSeconds,
           outputSeconds,
+          ...(music ? { musicTrack: music.name } : {}),
+          ...(audioName ? { audioName } : {}),
         },
       },
     });
@@ -227,6 +253,8 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
       observations: decision.observations,
       trimmedFromSeconds: trimmed ? probed.durationSeconds : undefined,
       startSeconds,
+      musicTrack: music?.name,
+      audioName,
     };
   });
 }
@@ -240,6 +268,15 @@ export function formatPreparedVideo(result: PreparedVideo): string {
     "",
     result.reason,
   ];
+
+  if (result.musicTrack) {
+    lines.push(
+      "",
+      `Music: ${trackTitle(result.musicTrack)} underneath` +
+        (result.transcript || result.subtitleProblem ? ", ducked out of the way while you're talking" : "") +
+        ".",
+    );
+  }
 
   if (result.subtitleProblem) {
     lines.push("", `No subtitles: ${result.subtitleProblem}`);

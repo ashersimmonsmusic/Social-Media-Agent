@@ -15,6 +15,15 @@ export interface DraftPost {
    * route serves both from the same path shape.
    */
   mediaKind?: "IMAGE" | "VIDEO";
+  /**
+   * What Instagram should call this Reel's own audio.
+   *
+   * Not a way to choose music — the API cannot reach Instagram's catalogue at
+   * all. It names the audio the video already contains, which is what turns it
+   * into a tappable audio page other people can post with. Settable once per
+   * Reel, so it goes on the container or not at all.
+   */
+  audioName?: string;
 }
 
 export interface ValidationResult {

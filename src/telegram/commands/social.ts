@@ -82,6 +82,7 @@ export function registerSocialCommands(bot: Telegraf) {
       caption,
       mediaUrl: media?.mediaUrl ?? payload.mediaUrl,
       mediaKind: media?.mediaKind,
+      audioName: media?.audioName,
       assetId: payload.assetId,
     });
 

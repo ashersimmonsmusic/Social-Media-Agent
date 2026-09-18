@@ -60,6 +60,29 @@ function toVideo(file: DriveFileResponse): DriveVideo {
   };
 }
 
+/**
+ * A music file. Narrower than DriveVideo on purpose: Drive reports no duration
+ * for audio, so the length of a track is unknown until it is downloaded, and a
+ * field that is always undefined invites code that trusts it.
+ */
+export interface DriveTrack {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdTime: string;
+}
+
+function toTrack(file: DriveFileResponse): DriveTrack {
+  return {
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    sizeBytes: Number(file.size ?? 0),
+    createdTime: file.createdTime,
+  };
+}
+
 const FILE_FIELDS = "id,name,mimeType,size,createdTime,videoMediaMetadata(durationMillis,width,height)";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -119,16 +142,20 @@ export async function collectFolderIds(rootId: string): Promise<string[]> {
 }
 
 /**
- * Lists videos, newest first.
+ * Lists files of one kind, newest first.
  *
- * With GOOGLE_DRIVE_FOLDER_ID set this covers the folder and everything nested
- * inside it; without it, every video the account can see.
+ * With a folder id this covers that folder and everything nested inside it;
+ * without one, everything of that kind the account can see.
  */
-export async function listVideos(limit = 20): Promise<DriveVideo[]> {
+async function listByMimePrefix(
+  mimePrefix: string,
+  rootFolderId: string | undefined,
+  limit: number,
+): Promise<DriveFileResponse[]> {
   const pageSize = String(Math.min(Math.max(limit, 1), 100));
-  const base = ["mimeType contains 'video/'", "trashed = false"];
+  const base = [`mimeType contains '${mimePrefix}'`, "trashed = false"];
 
-  if (!env.GOOGLE_DRIVE_FOLDER_ID) {
+  if (!rootFolderId) {
     const response = await driveRequest("files", {
       q: base.join(" and "),
       orderBy: "createdTime desc",
@@ -139,11 +166,11 @@ export async function listVideos(limit = 20): Promise<DriveVideo[]> {
       includeItemsFromAllDrives: "true",
     });
     const json = (await response.json()) as { files?: DriveFileResponse[] };
-    return (json.files ?? []).map(toVideo);
+    return json.files ?? [];
   }
 
-  const folderIds = await collectFolderIds(env.GOOGLE_DRIVE_FOLDER_ID);
-  const collected = new Map<string, DriveVideo>();
+  const folderIds = await collectFolderIds(rootFolderId);
+  const collected = new Map<string, DriveFileResponse>();
 
   for (const batch of chunk(folderIds, PARENTS_PER_QUERY)) {
     const parents = batch.map((id) => `'${id}' in parents`).join(" or ");
@@ -157,13 +184,37 @@ export async function listVideos(limit = 20): Promise<DriveVideo[]> {
     });
     const json = (await response.json()) as { files?: DriveFileResponse[] };
     // Keyed by id because a file living in two folders would otherwise appear twice.
-    for (const file of json.files ?? []) collected.set(file.id, toVideo(file));
+    for (const file of json.files ?? []) collected.set(file.id, file);
   }
 
   // Each batch was sorted on its own, so the merged set needs sorting again.
   return [...collected.values()]
     .sort((a, b) => b.createdTime.localeCompare(a.createdTime))
     .slice(0, limit);
+}
+
+export async function listVideos(limit = 20): Promise<DriveVideo[]> {
+  return (await listByMimePrefix("video/", env.GOOGLE_DRIVE_FOLDER_ID, limit)).map(toVideo);
+}
+
+/**
+ * Lists music, newest first.
+ *
+ * Kept in its own folder by default. Mixing tracks in with the footage would
+ * mean every /videos listing had to filter them out, and worse, one wrong tap
+ * would put an audio file through the reframer.
+ */
+export async function listTracks(limit = 25): Promise<DriveTrack[]> {
+  const folder = env.GOOGLE_DRIVE_MUSIC_FOLDER_ID ?? env.GOOGLE_DRIVE_FOLDER_ID;
+  return (await listByMimePrefix("audio/", folder, limit)).map(toTrack);
+}
+
+export async function getTrack(fileId: string): Promise<DriveTrack> {
+  const response = await driveRequest(`files/${encodeURIComponent(fileId)}`, {
+    fields: FILE_FIELDS,
+    supportsAllDrives: "true",
+  });
+  return toTrack((await response.json()) as DriveFileResponse);
 }
 
 export async function getVideo(fileId: string): Promise<DriveVideo> {

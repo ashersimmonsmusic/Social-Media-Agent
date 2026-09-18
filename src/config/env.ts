@@ -107,6 +107,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalString(),
   GOOGLE_CLIENT_SECRET: optionalString(),
   GOOGLE_DRIVE_FOLDER_ID: optionalString(),
+  // A separate folder for music. Falls back to the folder above, but keeping
+  // tracks apart from footage means /videos never lists an MP3 and /music never
+  // lists a clip.
+  GOOGLE_DRIVE_MUSIC_FOLDER_ID: optionalString(),
 
   // The whole contents of a service account key file. When set, Drive access
   // goes through it and the consent flow above is unused — a service account
@@ -128,6 +132,16 @@ const envSchema = z.object({
 
   // Transcription, for putting spoken words on screen. Pay-as-you-go: about
   // $0.22 an hour of audio, so a minute-long clip is a fraction of a penny.
+  // Music beds. The cap is smaller than the video one because a bed is mixed in
+  // alongside everything else a render already needs on disk, and an uncompressed
+  // WAV of a whole track is the one thing here that arrives unexpectedly large.
+  MUSIC_MAX_TRACK_MB: z.coerce.number().positive().default(80),
+  // What a Reel's own audio is called on Instagram, which is what makes it a
+  // tappable audio page other people can use. Instagram's own catalogue cannot
+  // be reached from the API at all, so this is the only music-related thing the
+  // publish call can say.
+  INSTAGRAM_AUDIO_NAME: optionalString(),
+
   ELEVENLABS_API_KEY: optionalString(),
   ELEVENLABS_STT_MODEL: stringWithDefault("scribe_v1"),
   RAILWAY_VOLUME_MOUNT_PATH: optionalString(),

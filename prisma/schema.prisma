@@ -477,3 +477,17 @@ model OAuthAccount {
 
   @@unique([provider])
 }
+
+// ── Small pieces of state Asher sets from Telegram ───────────────────────
+
+/// A single named setting.
+///
+/// Deliberately generic rather than a column per feature: these are choices made
+/// from a phone that have to survive a redeploy — which music bed to use, how
+/// loud it sits — and none is worth a migration of its own. Anything other code
+/// needs to reason about still gets a real column.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

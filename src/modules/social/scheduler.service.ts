@@ -133,6 +133,7 @@ async function publishClaimedPost(post: {
       caption: post.caption,
       mediaUrl: media?.mediaUrl,
       mediaKind: media?.mediaKind,
+      audioName: media?.audioName,
     });
     await prisma.socialPost.update({
       where: { id: post.id },

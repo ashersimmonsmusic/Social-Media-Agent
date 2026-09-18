@@ -9,6 +9,7 @@ import { downloadToFile, getVideo } from "../drive/drive.service.js";
 import { transcriber } from "../transcription/index.js";
 import type { TranscriptCue } from "../transcription/types.js";
 import { assertRoomFor, probe, withTempDir } from "../video/ffmpeg.js";
+import { activeBed, prepareBed } from "../music/music.service.js";
 import { cutClip, extractJobAudio } from "./cut.service.js";
 import { analyseTranscript } from "./detect.service.js";
 
@@ -107,7 +108,14 @@ export async function processVideo(videoId: string, telegram?: Telegram): Promis
   await withTempDir(async (dir) => {
     const sourcePath = join(dir, "source");
 
-    await assertRoomFor(Number(video.sizeBytes ?? 0));
+    // The music bed lands in the same working directory as the source and every
+    // clip cut from it, so its worst case is reserved before anything is fetched.
+    const bedWanted = (await activeBed()) !== null;
+    await assertRoomFor(
+      Number(video.sizeBytes ?? 0),
+      undefined,
+      bedWanted ? env.MUSIC_MAX_TRACK_MB * 1024 * 1024 : 0,
+    );
 
     await setStatus(videoId, "DOWNLOADING", `Fetching ${video.filename}`);
     await downloadToFile(video.driveFileId, sourcePath, env.VIDEO_MAX_SOURCE_MB * 1024 * 1024);
@@ -192,6 +200,13 @@ export async function processVideo(videoId: string, telegram?: Telegram): Promis
     );
 
     await setStatus(videoId, "CUTTING", `Cutting the best ${Math.min(CLIPS_TO_RENDER, clips.length)}`);
+
+    // Fetched once for the whole job rather than per clip: six clips means six
+    // renders, and downloading the same track six times would be six times the
+    // Drive quota for no difference in the output. Clipping only runs on footage
+    // with speech in it, so the bed always ducks here.
+    const music = await prepareBed(dir, true);
+
     let cut = 0;
     for (const clip of clips.slice(0, CLIPS_TO_RENDER)) {
       try {
@@ -205,6 +220,8 @@ export async function processVideo(videoId: string, telegram?: Telegram): Promis
           endSeconds: clip.endSeconds,
           cues,
           subtitles: true,
+          music: music?.bed,
+          musicName: music?.name,
         });
         cut += 1;
         await prisma.sourceVideo.update({

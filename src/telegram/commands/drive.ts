@@ -19,6 +19,7 @@ import {
 import { isServiceAccountConfigured, serviceAccountEmail } from "../../modules/oauth/serviceAccount.js";
 import { prepareVideoForReels, formatPreparedVideo } from "../../modules/video/video.service.js";
 import { VideoToolError } from "../../modules/video/ffmpeg.js";
+import { MusicError } from "../../modules/music/music.service.js";
 import type { ReframeMode } from "../../modules/video/reframe.service.js";
 import { sendVideoPreview } from "../notify.js";
 import { storage } from "../../storage/index.js";
@@ -104,7 +105,8 @@ export function registerDriveCommands(bot: Telegraf) {
     if (!fileId) {
       await ctx.reply(
         "Send /videos and tap the clip you want — no need to type an id.\n\n" +
-          "Add `subs` to burn what's spoken onto the picture: /reel <id> subs",
+          "Add `subs` to burn what's spoken onto the picture: /reel <id> subs\n" +
+          "Add `nomusic` to skip the music bed just this once: /reel <id> nomusic",
       );
       return;
     }
@@ -112,7 +114,10 @@ export function registerDriveCommands(bot: Telegraf) {
     const mode: ReframeMode = parts.includes("crop") ? "crop" : parts.includes("blur") ? "blur" : "auto";
     const startArg = parts.slice(1).find((part) => /^\d+$/.test(part));
     const subtitles = parts.includes("subs") || parts.includes("subtitles");
-    await makeReel(ctx, fileId, mode, startArg ? Number(startArg) : undefined, subtitles);
+    // Undefined rather than true when unasked: whether there is a bed at all is
+    // /music's business, and passing true here would override its off switch.
+    const music = parts.includes("nomusic") || parts.includes("nobed") ? false : undefined;
+    await makeReel(ctx, fileId, mode, startArg ? Number(startArg) : undefined, subtitles, music);
   });
 
   bot.command(commandTrigger("drivedisconnect"), async (ctx) => {
@@ -172,12 +177,13 @@ async function makeReel(
   mode: ReframeMode = "auto",
   startSeconds?: number,
   subtitles = false,
+  music?: boolean,
 ): Promise<void> {
   await ctx.reply("Working on it — reading the footage, deciding the framing, then rendering. Usually a minute or two.");
 
   try {
     await ctx.sendChatAction("upload_video");
-    const prepared = await prepareVideoForReels({ driveFileId: fileId, mode, startSeconds, subtitles });
+    const prepared = await prepareVideoForReels({ driveFileId: fileId, mode, startSeconds, subtitles, music });
 
     const asset = await getAsset(prepared.assetId);
     const sent = asset?.storageKey
@@ -206,7 +212,7 @@ async function makeReel(
     const detail = error instanceof Error ? error.message : String(error);
     logger.error("reel.prepare_failed", { fileId, error: detail });
     await ctx.reply(
-      error instanceof VideoToolError || error instanceof DriveError
+      error instanceof VideoToolError || error instanceof DriveError || error instanceof MusicError
         ? detail
         : `Couldn't make that into a Reel:\n\n${detail.slice(0, 400)}`,
     );

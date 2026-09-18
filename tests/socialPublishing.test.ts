@@ -111,6 +111,48 @@ describe("InstagramAdapter.publish for real", () => {
     ).rejects.toThrow(/Media URL unreachable/);
   });
 
+  it("names the Reel's own audio, which Instagram accepts only at creation", async () => {
+    // A Reel is polled until Instagram finishes transcoding it, so this one uses
+    // its own adapter rather than waiting out the real backoff.
+    const reelAdapter = new InstagramAdapter({ firstDelayMs: 1, maxDelayMs: 2, timeoutMs: 200 });
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const body = String((init as RequestInit | undefined)?.body ?? "");
+      // The status poll is a GET; only the two POSTs are what this asserts on.
+      if (body) bodies.push(body);
+      const id = String(url).includes("media_publish") ? "post-999" : "container-123";
+      return new Response(JSON.stringify({ id, status_code: "FINISHED" }), { status: 200 });
+    });
+
+    await reelAdapter.publish(account, {
+      caption: "Live now",
+      mediaUrl: "https://example.com/a.mp4",
+      mediaKind: "VIDEO",
+      audioName: "Nightdrive · Asher Simmons",
+    });
+
+    expect(new URLSearchParams(bodies[0]!).get("audio_name")).toBe("Nightdrive · Asher Simmons");
+    // It belongs to the container, not the publish call.
+    expect(bodies[1]).not.toContain("audio_name");
+  });
+
+  it("does not send audio_name on a still, which has no audio to name", async () => {
+    const bodies: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      bodies.push(String((init as RequestInit | undefined)?.body ?? ""));
+      return new Response(JSON.stringify({ id: String(url).includes("media_publish") ? "post-1" : "c-1" }), { status: 200 });
+    });
+
+    await adapter.publish(account, {
+      caption: "A photo",
+      mediaUrl: "https://example.com/a.jpg",
+      mediaKind: "IMAGE",
+      audioName: "Nightdrive",
+    });
+
+    expect(bodies[0]).not.toContain("audio_name");
+  });
+
   it("does not report success when the API returns no post id", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
     await expect(

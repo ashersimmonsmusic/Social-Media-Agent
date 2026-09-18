@@ -78,6 +78,66 @@ account — but pay-as-you-go at $0.22 an hour means your actual bill is pennies
 If there's no speech in the clip, or transcription fails, **you still get the
 clip** — it just arrives without subtitles and says why.
 
+## Music
+
+There are two completely different things people mean by "add music to a post",
+and only one of them is possible for a bot.
+
+**Instagram's music library is off limits.** Trending sounds, licensed tracks,
+the whole catalogue — the publishing API has no parameter for any of it, and
+that's a licensing decision on Meta's side rather than a gap someone forgot.
+Every scheduling tool hits the same wall. If a post needs a trending sound, that
+post gets made on your phone.
+
+**Music inside the file works fine.** Instagram doesn't care where audio came
+from once it's in the MP4, and since the music is yours, that's the right answer
+anyway.
+
+```
+/music              → lists the tracks in your Drive; tap one
+/music off          → stop using it, but remember which track
+/music on           → start again
+/music level -10    → how loud it sits (0 loudest, -40 barely there)
+/music start 32     → begin 32 seconds into the track, not at the top
+/music forget       → clear it entirely
+```
+
+Put your tracks in a Drive folder and set `GOOGLE_DRIVE_MUSIC_FOLDER_ID` in
+Railway to that folder's id — the long code in its address bar. Share it with
+the bot the same way you shared the video folder.
+
+Once a track is set, **every clip the bot renders gets it**, including the ones
+the clipping pipeline cuts out of a long video. It's mixed in at -14dB by
+default, which is well under a speaking voice, and it's **ducked automatically**
+— pulled down about another 10dB whenever you're talking, and let back up in the
+gaps. It fades in over three quarters of a second and out over one and a half, so
+it doesn't start or stop dead. A track shorter than the clip loops.
+
+If the footage is silent, the bed comes up to -4dB instead and becomes the whole
+soundtrack, because -14dB of music over silence sounds like a mistake.
+
+To skip it for one clip: `/reel <id> nomusic`.
+
+### Naming the audio
+
+`INSTAGRAM_AUDIO_NAME` in Railway — set it to your artist name. When the bot
+publishes a Reel it tells Instagram what the Reel's own audio is called, which is
+what turns it into a tappable audio page other people can post with, rather than
+an unnamed blob. With a music bed the label becomes *"Track title · Your name"*;
+without one it's just your name.
+
+This can only be set **once per Reel**, at the moment it's published. There is no
+fixing it afterwards from here, so check it on a dry run first: it's recorded in
+the audit log as `audioName`.
+
+### The catch worth knowing about
+
+Instagram's content-ID system may still flag or mute your own music. Artists get
+this on their own accounts regularly. The fix isn't technical — claim your
+catalogue through your distributor's rights-management tool so Instagram's system
+knows the account is yours. Do that before you rely on this, or you'll be
+debugging the render when the problem was paperwork.
+
 ## What it can't do
 
 Say these out loud now so they're not a surprise later:
@@ -88,9 +148,12 @@ Say these out loud now so they're not a surprise later:
   what's in there.
 - **It can't hear audio** beyond transcribing it for subtitles (below). It still
   doesn't know what the clip *means*, so a caption depends on you saying so.
-- **It can't edit.** No cutting between shots, no burned-in captions, no music,
-  no effects. It makes one clip vertical and can start it later than zero. That's
-  it. Cutting is still a CapCut or phone job.
+- **It can't edit.** No cutting between shots, no effects, no transitions. It
+  makes one clip vertical, can start it later than zero, can burn subtitles on,
+  and can lay one music track underneath. Anything beyond that is still a CapCut
+  or phone job.
+- **It can't use Instagram's music.** Only music baked into the file — see
+  **Music** above.
 - **90 seconds maximum.** Instagram's API won't publish a longer Reel. For longer
   footage, tell it where to start: `/reel <id> 45` begins 45 seconds in.
 - **Instagram only.** No TikTok, no YouTube, no Stories, no carousels.

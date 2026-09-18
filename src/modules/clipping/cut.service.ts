@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { logger } from "../../lib/logger.js";
 import { ingestFile } from "../assets/asset.service.js";
 import { prisma } from "../../db/prisma.js";
-import { extractAudio, extractFrames, probe, renderVertical } from "../video/ffmpeg.js";
+import { extractAudio, extractFrames, probe, renderVertical, type MusicBed } from "../video/ffmpeg.js";
+import { audioNameFor, trackTitle } from "../music/music.service.js";
 import { decideReframe } from "../video/reframe.service.js";
 import { buildAss } from "../video/subtitles.js";
 import type { TranscriptCue } from "../transcription/types.js";
@@ -56,6 +57,10 @@ export interface CutClipInput {
   endSeconds: number;
   cues: TranscriptCue[];
   subtitles?: boolean;
+  /** Music to sit under the clip, already fetched by the job that owns this run. */
+  music?: MusicBed;
+  /** The track's filename, for the description and Instagram's audio label. */
+  musicName?: string;
 }
 
 /**
@@ -90,7 +95,9 @@ export async function cutClip(input: CutClipInput): Promise<{ assetId: string; f
     }
   }
 
-  await renderVertical(clipPath, outputPath, decision.plan, clipProbe, { subtitlePath });
+  // The bed goes on this pass, not the cut above: mixing it in first would mean
+  // the fades landed on the intermediate file's edges rather than the clip's.
+  await renderVertical(clipPath, outputPath, decision.plan, clipProbe, { subtitlePath, music: input.music });
 
   const filename = safeFilename(input.rank, input.title, duration);
   const data = await readFile(outputPath);
@@ -99,8 +106,28 @@ export async function cutClip(input: CutClipInput): Promise<{ assetId: string; f
     mimeType: "video/mp4",
     data,
     source: "Clipped from a long video",
-    description: `${input.title} — ${Math.round(duration)}s clip. ${decision.reason}`,
+    description:
+      `${input.title} — ${Math.round(duration)}s clip. ${decision.reason}` +
+      (input.music && input.musicName ? ` Music: ${trackTitle(input.musicName)}.` : ""),
   });
+
+  // Recorded on the asset because that is what the publish path reads: by the
+  // time this goes out, /music may be set to a different track entirely. Merged
+  // rather than assigned, because ingestFile has already written to this field.
+  const audioName = audioNameFor(input.music ? input.musicName : undefined);
+  if (audioName) {
+    const existing = (asset.metadata ?? {}) as Record<string, unknown>;
+    await prisma.asset.update({
+      where: { id: asset.id },
+      data: {
+        metadata: {
+          ...existing,
+          audioName,
+          ...(input.music && input.musicName ? { musicTrack: input.musicName } : {}),
+        },
+      },
+    });
+  }
 
   await prisma.clip.update({ where: { id: input.clipId }, data: { assetId: asset.id } });
   logger.info("clipping.clip_cut", { clipId: input.clipId, filename, sizeBytes: data.byteLength });
