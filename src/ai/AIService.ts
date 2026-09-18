@@ -54,19 +54,12 @@ const MODEL_FOR_TASK: Record<TaskType, string> = {
   CAPTION: env.AI_MODEL_FAST,
   CLASSIFY: env.AI_MODEL_FAST,
   VISION: env.AI_MODEL_FAST,
-  TRANSCRIBE: env.AI_MODEL_FAST,
 };
 
 export class AIService {
   constructor(private readonly provider: AIProvider) {}
 
   async generate(taskType: TaskType, prompt: string, options?: GenerateOptions): Promise<GenerateResult> {
-    if (taskType === "VISION" || taskType === "TRANSCRIBE") {
-      // Interface exists now so Phase 2 can wire real image/audio input
-      // against a stable contract; no vision/audio call is implemented yet.
-      throw new Error(`${taskType} is not implemented in Phase 1 — interface reserved for a later phase.`);
-    }
-
     await checkAiBudget();
 
     const model = MODEL_FOR_TASK[taskType];

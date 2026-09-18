@@ -2,7 +2,7 @@
  * A task category, not a model name. AIService maps each to a model tier
  * (brief §48) so callers never hard-code a specific model.
  */
-export type TaskType = "STRATEGY" | "CAPTION" | "CLASSIFY" | "CHAT" | "VISION" | "TRANSCRIBE";
+export type TaskType = "STRATEGY" | "CAPTION" | "CLASSIFY" | "CHAT" | "VISION";
 
 /**
  * A file sent alongside a prompt for the model to read. Described
