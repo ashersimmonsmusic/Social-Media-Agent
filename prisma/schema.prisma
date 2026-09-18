@@ -120,6 +120,7 @@ model Asset {
   metadata        Json          @default("{}")
   contentIdeas    ContentIdea[]
   socialPosts     SocialPost[]
+  clips           Clip[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -305,6 +306,84 @@ enum SocialPlatform {
   X
   TIKTOK
   YOUTUBE
+}
+
+/// Where a long video is in the pipeline.
+///
+/// Analysing an hour of footage takes tens of minutes and must survive a
+/// deploy, so progress lives here rather than in memory. Each value is also
+/// what Asher is told is happening.
+enum SourceVideoStatus {
+  QUEUED
+  DOWNLOADING
+  EXTRACTING_AUDIO
+  TRANSCRIBING
+  ANALYSING
+  CUTTING
+  COMPLETE
+  FAILED
+}
+
+model SourceVideo {
+  id              String            @id @default(cuid())
+  /// The Drive file this came from. Unique, so the same video is never analysed twice.
+  driveFileId     String            @unique
+  filename        String
+  durationSeconds Float?
+  width           Int?
+  height          Int?
+  sizeBytes       BigInt?
+  status          SourceVideoStatus @default(QUEUED)
+  /// What it is doing right now, in words, for the progress message.
+  statusDetail    String?
+  failureReason   String?
+  /// Timestamped segments, kept so analysis can be rerun without paying to transcribe again.
+  transcript      Json?
+  transcriptText  String?
+  clips           Clip[]
+  /// Set when a worker claims it, so a second worker can tell it is taken.
+  claimedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([status, createdAt])
+}
+
+enum ClipDecision {
+  PENDING
+  SELECTED
+  REJECTED
+}
+
+model Clip {
+  id                 String       @id @default(cuid())
+  sourceVideoId      String
+  sourceVideo        SourceVideo  @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
+  /// Describes the actual content — never clip_01.
+  title              String
+  startSeconds       Float
+  endSeconds         Float
+  /// What is said in it, so it can be reviewed without watching.
+  transcript         String
+  /// Why it was chosen, in Asher's terms rather than as a number.
+  reason             String
+  score              Int
+  /// The per-criterion breakdown behind the score.
+  scores             Json         @default("{}")
+  rank               Int
+  topic              String?
+  suggestedPlatforms String[]     @default([])
+  decision           ClipDecision @default(PENDING)
+  decidedAt          DateTime?
+  /// The rendered vertical version, once it has been cut.
+  assetId            String?
+  asset              Asset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([sourceVideoId, rank])
+  @@index([decision])
 }
 
 enum SocialAuthType {
