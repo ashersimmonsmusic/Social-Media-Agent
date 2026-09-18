@@ -200,8 +200,9 @@ export const AGENT_TOOLS: AgentTool[] = [
       "to post as a Reel. Get the id from list_drive_videos first. This looks at the actual footage to decide how to " +
       "reframe it: if there's a clear subject that stays put it crops in on it, and if not it keeps the whole frame " +
       "with a blurred fill so nothing is cut off. It publishes nothing — it returns an asset id you then pass to " +
-      "propose_social_post. Instagram's API caps Reels at 90 seconds, so for longer footage pass start_seconds to " +
-      "pick which 90 you want. Rendering takes a minute or two; tell him it's running before you call it. Report the " +
+      "propose_social_post. Set subtitles:true to burn what's said onto the picture — most Reels are watched muted, " +
+      "so it's worth offering whenever he speaks or sings on camera. Instagram's API caps Reels at 90 seconds, so " +
+      "for longer footage pass start_seconds to pick which 90 you want. Rendering takes a minute or two; tell him it's running before you call it. Report the " +
       "reframing decision back to him in your own words, including when the result has blurred bars, so he is not " +
       "surprised by it.",
     inputSchema: {
@@ -218,6 +219,13 @@ export const AGENT_TOOLS: AgentTool[] = [
         start_seconds: {
           type: "number",
           description: "Seconds into the source to start from. Only needed for footage longer than 90 seconds.",
+        },
+        subtitles: {
+          type: "boolean",
+          description:
+            "Burn what's spoken onto the picture. Offer this for any clip where he talks or performs with words — " +
+            "most people watch Reels muted. Costs a fraction of a penny. Leave off for instrumental footage, " +
+            "where there is nothing to caption.",
         },
       },
       required: ["drive_file_id"],

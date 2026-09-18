@@ -66,6 +66,8 @@ export interface RenderOptions {
   durationSeconds?: number;
   /** Used only to scale the hang timeout — a bigger source legitimately takes longer. */
   sourceBytes?: number;
+  /** An .ass file to burn into the picture. Applied last, over the finished frame. */
+  subtitlePath?: string;
 }
 
 /**
@@ -181,6 +183,39 @@ export async function extractFrames(path: string, durationSeconds: number, count
  * Video encoders reject odd dimensions, so every computed width is forced even.
  * Clamped to a minimum of 2 because a zero-width crop is not a crop.
  */
+/**
+ * Pulls the audio out as a small mono MP3 for transcription.
+ *
+ * Mono at 16kHz is what speech recognition wants and keeps a 90-second clip
+ * around a megabyte — the audio is sent to a third party, so sending less of it
+ * is also the point.
+ *
+ * Takes the same start and duration as the render, or the subtitles would be
+ * timed against a different piece of the clip than the one on screen.
+ */
+export async function extractAudio(
+  input: string,
+  output: string,
+  options: { startSeconds?: number; durationSeconds?: number } = {},
+): Promise<void> {
+  const args = ["-hide_banner", "-loglevel", "error", "-y"];
+  if (options.startSeconds) args.push("-ss", options.startSeconds.toFixed(3));
+  args.push("-i", input);
+  if (options.durationSeconds) args.push("-t", options.durationSeconds.toFixed(3));
+  args.push("-vn", "-ac", "1", "-ar", "16000", "-c:a", "libmp3lame", "-b:a", "64k", output);
+
+  await ffmpeg(args, PROBE_TIMEOUT_MS * 8, "pull the audio out of that video");
+}
+
+/**
+ * Escapes a path for ffmpeg's subtitles filter, where a colon separates filter
+ * options — so a path containing one would be read as something other than a
+ * filename.
+ */
+export function escapeFilterPath(path: string): string {
+  return path.replace(/:/g, "\\:").replace(/'/g, "\\'");
+}
+
 export function evenise(value: number): number {
   return Math.max(2, Math.round(value / 2) * 2);
 }
@@ -210,13 +245,17 @@ export function cropOffsetFor(width: number, cropWidth: number, centrePercent: n
   return evenOffset(Math.max(0, Math.min(width - cropWidth, raw)));
 }
 
-function filterFor(plan: ReframePlan): { args: string[]; label: string } {
+function filterFor(plan: ReframePlan, subtitlePath?: string): { args: string[]; label: string } {
+  // Burned in last, over the finished vertical frame — applying it before the
+  // crop or scale would stretch the text along with the picture.
+  const subs = subtitlePath ? `,subtitles='${escapeFilterPath(subtitlePath)}'` : "";
+
   switch (plan.strategy) {
     case "crop":
       return {
         args: [
           "-vf",
-          `crop=${plan.cropWidth}:ih:${plan.cropX}:0,scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:flags=lanczos`,
+          `crop=${plan.cropWidth}:ih:${plan.cropX}:0,scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:flags=lanczos${subs}`,
         ],
         label: "-vf",
       };
@@ -230,7 +269,8 @@ function filterFor(plan: ReframePlan): { args: string[]; label: string } {
             `[bg]scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=increase,` +
             `crop=${TARGET_WIDTH}:${TARGET_HEIGHT},gblur=sigma=24[blurred];` +
             `[fg]scale=${TARGET_WIDTH}:-2[front];` +
-            `[blurred][front]overlay=(W-w)/2:(H-h)/2[v]`,
+            `[blurred][front]overlay=(W-w)/2:(H-h)/2${subtitlePath ? "[composited]" : "[v]"}` +
+            (subtitlePath ? `;[composited]subtitles='${escapeFilterPath(subtitlePath)}'[v]` : ""),
           "-map",
           "[v]",
         ],
@@ -241,7 +281,7 @@ function filterFor(plan: ReframePlan): { args: string[]; label: string } {
         args: [
           "-vf",
           `scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=decrease,` +
-            `pad=${TARGET_WIDTH}:${TARGET_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black`,
+            `pad=${TARGET_WIDTH}:${TARGET_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black${subs}`,
         ],
         label: "-vf",
       };
@@ -257,7 +297,7 @@ export function renderArgs(input: string, output: string, plan: ReframePlan, pro
   const requested = options.durationSeconds ?? probed.durationSeconds - start;
   const duration = Math.min(REELS_MAX_SECONDS, Math.max(1, requested));
 
-  const filter = filterFor(plan);
+  const filter = filterFor(plan, options.subtitlePath);
   const args = ["-hide_banner", "-loglevel", "error", "-y"];
 
   // -ss before -i seeks by keyframe, which is fast and accurate enough here.

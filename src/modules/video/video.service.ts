@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { env } from "../../config/env.js";
 import { logger } from "../../lib/logger.js";
@@ -8,6 +8,7 @@ import { recordAudit } from "../audit/audit.service.js";
 import { downloadToFile, formatDuration, getVideo } from "../drive/drive.service.js";
 import {
   assertRoomFor,
+  extractAudio,
   extractFrames,
   probe,
   renderVertical,
@@ -18,12 +19,17 @@ import {
 } from "./ffmpeg.js";
 import { decideReframe, type ReframeMode } from "./reframe.service.js";
 import { describeClipFromFrames } from "../content/caption.service.js";
+import { buildAss } from "./subtitles.js";
+import { transcriber } from "../transcription/index.js";
+import { TranscriptionNotConfiguredError } from "../transcription/types.js";
 
 /** Enough stills to tell whether a subject moves, and what is in shot. */
 const FRAMES_TO_SAMPLE = 6;
 
 export interface PrepareVideoInput {
   driveFileId: string;
+  /** Burn what's spoken onto the picture. Costs a fraction of a penny per clip. */
+  subtitles?: boolean;
   /** "auto" lets the model decide; the others override it. */
   mode?: ReframeMode;
   /** Where in the source clip to start, for footage longer than Instagram allows. */
@@ -34,6 +40,10 @@ export interface PreparedVideo {
   assetId: string;
   /** What the stills show, so a caption can be written without watching it. */
   whatItShows?: string;
+  /** What was said, when subtitles were asked for and there was speech to find. */
+  transcript?: string;
+  /** Why there are no subtitles, when they were asked for and didn't happen. */
+  subtitleProblem?: string;
   filename: string;
   sourceName: string;
   sourceShape: string;
@@ -112,9 +122,44 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
       logger.warn("video.describe_failed", { error: String(error) });
     }
 
+    // Subtitles before the render, because they are burned into the picture
+    // rather than laid over it afterwards.
+    let subtitlePath: string | undefined;
+    let transcript: string | undefined;
+    let subtitleProblem: string | undefined;
+
+    if (input.subtitles) {
+      try {
+        const audioPath = join(dir, "audio.mp3");
+        await extractAudio(sourcePath, audioPath, {
+          startSeconds,
+          durationSeconds: Math.min(REELS_MAX_SECONDS, probed.durationSeconds - startSeconds),
+        });
+
+        const result = await transcriber().transcribe(await readFile(audioPath), "audio.mp3");
+        if (result.cues.length === 0) {
+          subtitleProblem = "I couldn't hear any speech in that clip, so there's nothing to put on screen.";
+        } else {
+          subtitlePath = join(dir, "captions.ass");
+          await writeFile(subtitlePath, buildAss(result.cues), "utf8");
+          transcript = result.text;
+        }
+      } catch (error) {
+        // Never fatal. A clip without subtitles is still the clip he asked for,
+        // and losing the render over a transcription failure would be worse
+        // than delivering it plain and saying why.
+        subtitleProblem =
+          error instanceof TranscriptionNotConfiguredError
+            ? error.message
+            : `I couldn't transcribe it: ${error instanceof Error ? error.message : String(error)}`;
+        logger.warn("video.subtitles_failed", { error: String(error) });
+      }
+    }
+
     await renderVertical(sourcePath, outputPath, decision.plan, probed, {
       startSeconds,
       sourceBytes: meta.sizeBytes,
+      subtitlePath,
     });
 
     const rendered = await readFile(outputPath);
@@ -170,6 +215,8 @@ export async function prepareVideoForReels(input: PrepareVideoInput): Promise<Pr
     return {
       assetId: asset.id,
       whatItShows,
+      transcript,
+      subtitleProblem,
       filename: asset.filename,
       sourceName: meta.name,
       sourceShape: `${probed.width}x${probed.height}`,
@@ -193,6 +240,12 @@ export function formatPreparedVideo(result: PreparedVideo): string {
     "",
     result.reason,
   ];
+
+  if (result.subtitleProblem) {
+    lines.push("", `No subtitles: ${result.subtitleProblem}`);
+  } else if (result.transcript) {
+    lines.push("", "Subtitles burned in. What it says:", `"${result.transcript.slice(0, 400)}"`);
+  }
 
   if (result.trimmedFromSeconds) {
     lines.push(

@@ -125,6 +125,11 @@ const envSchema = z.object({
   // Instagram has a copy and Drive has the original, so this only decides how
   // long the third one lingers on the volume. 0 disables the cleanup.
   VIDEO_RETENTION_DAYS: z.coerce.number().min(0).default(7),
+
+  // Transcription, for putting spoken words on screen. Pay-as-you-go: about
+  // $0.22 an hour of audio, so a minute-long clip is a fraction of a penny.
+  ELEVENLABS_API_KEY: optionalString(),
+  ELEVENLABS_STT_MODEL: stringWithDefault("scribe_v1"),
   RAILWAY_VOLUME_MOUNT_PATH: optionalString(),
 
   STORAGE_DRIVER: z.enum(["local"]).default("local"),

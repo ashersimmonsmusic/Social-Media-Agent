@@ -302,7 +302,12 @@ export function buildToolExecutor(telegram: Telegram) {
       }
 
       case "prepare_video_for_reels": {
-        const args = input as { drive_file_id?: string; mode?: string; start_seconds?: number };
+        const args = input as {
+          drive_file_id?: string;
+          mode?: string;
+          start_seconds?: number;
+          subtitles?: boolean;
+        };
         if (!args.drive_file_id) return "I need the Drive file id — call list_drive_videos first.";
 
         const mode: ReframeMode =
@@ -313,6 +318,7 @@ export function buildToolExecutor(telegram: Telegram) {
             driveFileId: args.drive_file_id,
             mode,
             startSeconds: args.start_seconds,
+            subtitles: args.subtitles === true,
           });
 
           // Send the finished clip into the chat. The reframe is a judgement

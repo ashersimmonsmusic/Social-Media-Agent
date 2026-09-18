@@ -102,13 +102,17 @@ export function registerDriveCommands(bot: Telegraf) {
     const fileId = parts[0];
 
     if (!fileId) {
-      await ctx.reply("Send /videos and tap the clip you want — no need to type an id.");
+      await ctx.reply(
+        "Send /videos and tap the clip you want — no need to type an id.\n\n" +
+          "Add `subs` to burn what's spoken onto the picture: /reel <id> subs",
+      );
       return;
     }
 
     const mode: ReframeMode = parts.includes("crop") ? "crop" : parts.includes("blur") ? "blur" : "auto";
     const startArg = parts.slice(1).find((part) => /^\d+$/.test(part));
-    await makeReel(ctx, fileId, mode, startArg ? Number(startArg) : undefined);
+    const subtitles = parts.includes("subs") || parts.includes("subtitles");
+    await makeReel(ctx, fileId, mode, startArg ? Number(startArg) : undefined, subtitles);
   });
 
   bot.command(commandTrigger("drivedisconnect"), async (ctx) => {
@@ -167,12 +171,13 @@ async function makeReel(
   fileId: string,
   mode: ReframeMode = "auto",
   startSeconds?: number,
+  subtitles = false,
 ): Promise<void> {
   await ctx.reply("Working on it — reading the footage, deciding the framing, then rendering. Usually a minute or two.");
 
   try {
     await ctx.sendChatAction("upload_video");
-    const prepared = await prepareVideoForReels({ driveFileId: fileId, mode, startSeconds });
+    const prepared = await prepareVideoForReels({ driveFileId: fileId, mode, startSeconds, subtitles });
 
     const asset = await getAsset(prepared.assetId);
     const sent = asset?.storageKey

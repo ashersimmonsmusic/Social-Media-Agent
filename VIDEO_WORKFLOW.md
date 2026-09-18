@@ -52,6 +52,32 @@ Already-vertical footage is left alone.
 
 ---
 
+## Subtitles
+
+Most Reels are watched with the sound off, so words on screen are usually the
+difference between someone watching and someone scrolling.
+
+```
+/reel <id> subs
+```
+
+Or just ask — *"do that one with subtitles"*.
+
+It pulls the audio out, has it transcribed, and burns the words onto the picture
+before rendering. Plain white text with a heavy outline, low in the frame and
+clear of Instagram's own buttons. No bouncing, no colour changes, no
+word-by-word highlighting — those date fast and read as a template.
+
+**What it costs:** about 0.2 pence for a minute-long clip. Three reels a week is
+roughly 5p a month.
+
+**What you need:** an ElevenLabs API key in Railway as `ELEVENLABS_API_KEY`.
+Their free plan has no commercial usage rights, so it isn't an option for your
+account — but pay-as-you-go at $0.22 an hour means your actual bill is pennies.
+
+If there's no speech in the clip, or transcription fails, **you still get the
+clip** — it just arrives without subtitles and says why.
+
 ## What it can't do
 
 Say these out loud now so they're not a surprise later:
@@ -60,7 +86,8 @@ Say these out loud now so they're not a surprise later:
   where to crop and nothing else. It doesn't know what you say, what happens, or
   how it ends — so it can't write a caption about the content unless you tell it
   what's in there.
-- **It can't hear audio.** No transcription.
+- **It can't hear audio** beyond transcribing it for subtitles (below). It still
+  doesn't know what the clip *means*, so a caption depends on you saying so.
 - **It can't edit.** No cutting between shots, no burned-in captions, no music,
   no effects. It makes one clip vertical and can start it later than zero. That's
   it. Cutting is still a CapCut or phone job.
