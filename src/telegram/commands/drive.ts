@@ -13,6 +13,7 @@ import {
   formatVideoList,
   videoButtonLabel,
   renameFile,
+  getVideo,
   DriveError,
   type DriveVideo,
 } from "../../modules/drive/drive.service.js";
@@ -21,6 +22,7 @@ import { prepareVideoForReels, formatPreparedVideo } from "../../modules/video/v
 import { VideoToolError } from "../../modules/video/ffmpeg.js";
 import type { ReframeMode } from "../../modules/video/reframe.service.js";
 import { sendVideoPreview } from "../notify.js";
+import { setAwaitingRename } from "../editState.js";
 import { storage } from "../../storage/index.js";
 import { getAsset } from "../../modules/assets/asset.service.js";
 import { logger } from "../../lib/logger.js";
@@ -113,6 +115,40 @@ export function registerDriveCommands(bot: Telegraf) {
     const startArg = parts.slice(1).find((part) => /^\d+$/.test(part));
     const subtitles = parts.includes("subs") || parts.includes("subtitles");
     await makeReel(ctx, fileId, mode, startArg ? Number(startArg) : undefined, subtitles);
+  });
+
+  bot.command(commandTrigger("rename"), async (ctx) => {
+    const payload = ctx.payload.trim();
+
+    // "/rename <id> <name>" in one go, for when he already has the id.
+    const direct = /^(\S+)\s+(.+)$/.exec(payload);
+    if (direct) {
+      const [, fileId, newName] = direct;
+      await applyRename(ctx, fileId!, newName!);
+      return;
+    }
+
+    try {
+      await ctx.sendChatAction("typing");
+      const videos = await listVideos(12);
+      if (videos.length === 0) {
+        await ctx.reply(formatVideoList(videos));
+        return;
+      }
+
+      // A list to tap, for the same reason /videos has one: transcribing a
+      // 33-character Drive id from one message into another is where this
+      // stops being used.
+      await ctx.reply("Which one should I rename?", {
+        reply_markup: {
+          inline_keyboard: videos.map((video: DriveVideo) => [
+            { text: videoButtonLabel(video), callback_data: `rn:${video.id}` },
+          ]),
+        },
+      });
+    } catch (error) {
+      await replyWithDriveError(ctx, error, "rename.list_failed");
+    }
   });
 
   bot.command(commandTrigger("drivedisconnect"), async (ctx) => {
@@ -228,5 +264,57 @@ export function registerDriveCallbacks(bot: Telegraf) {
     await ctx.editMessageReplyMarkup(undefined).catch(() => {});
 
     await makeReel(ctx, fileId);
+  });
+}
+
+/** One place for the "Drive isn't reachable" replies, which several paths share. */
+async function replyWithDriveError(ctx: Context, error: unknown, logKey: string): Promise<void> {
+  if (
+    error instanceof GoogleNotConnectedError ||
+    error instanceof GoogleNotConfiguredError ||
+    error instanceof GoogleReauthRequiredError
+  ) {
+    await ctx.reply(error.message);
+    return;
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  logger.error(logKey, { error: detail });
+  await ctx.reply(error instanceof DriveError ? detail : `Couldn't reach your Drive:\n\n${detail.slice(0, 300)}`);
+}
+
+/** Renames one file and says what changed, since a silent rename is unnerving. */
+export async function applyRename(ctx: Context, fileId: string, newName: string): Promise<void> {
+  try {
+    const { from, to } = await renameFile(fileId, newName);
+    await ctx.reply(
+      from === to ? `It was already called "${to}".` : `Renamed:\n\n${from}\n  ↓\n${to}`,
+    );
+  } catch (error) {
+    await replyWithDriveError(ctx, error, "rename.failed");
+  }
+}
+
+/** Handles a tap on the rename list: remembers the file, then waits for a name. */
+export function registerRenameCallbacks(bot: Telegraf) {
+  bot.on("callback_query", async (ctx, next) => {
+    const data = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+    if (!data || !data.startsWith("rn:")) return next();
+
+    const fileId = data.slice("rn:".length);
+    const chatId = String(ctx.chat?.id ?? "");
+    await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+
+    let currentName = fileId;
+    try {
+      currentName = (await getVideo(fileId)).name;
+    } catch {
+      // Not worth failing the rename over; the name is only for the prompt.
+    }
+
+    setAwaitingRename(chatId, fileId, currentName);
+    await ctx.reply(
+      `Currently "${currentName}".\n\nWhat should I call it? Send the new name — no need for the .mp4, I'll keep it.`,
+    );
   });
 }
