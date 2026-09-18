@@ -194,27 +194,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     },
   },
   {
-    name: "rename_drive_video",
-    description:
-      "Rename one of Asher's videos in Google Drive so the file says what it is. Footage off a camera or phone " +
-      "arrives called things like 00066.MTS or 1547174371597.mp4, which makes his own Drive unsearchable. Get the " +
-      "id from list_drive_videos. Use a short, factual name describing what's in the clip — where it was, what he's " +
-      "doing — not marketing copy. Keep the file extension off; it's preserved automatically. This changes his real " +
-      "Drive, so only rename when he's asked you to, or when he's agreed to a name you suggested. It is the only " +
-      "change you can make to his Drive — you cannot move, delete or alter a file.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        drive_file_id: { type: "string", description: "The Drive file id from list_drive_videos." },
-        new_name: {
-          type: "string",
-          description: "The new name, without the extension. E.g. 'Louisiana Bristol live keys take 2'.",
-        },
-      },
-      required: ["drive_file_id", "new_name"],
-    },
-  },
-  {
     name: "prepare_video_for_reels",
     description:
       "Take one video from Asher's Google Drive and turn it into a vertical 9:16 clip in his content library, ready " +

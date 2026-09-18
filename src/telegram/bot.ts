@@ -17,17 +17,8 @@ import { registerSocialCommands } from "./commands/social.js";
 import { registerWebsiteCommands } from "./commands/website.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerNewsletterCommand } from "./commands/newsletter.js";
-import {
-  registerDriveCommands,
-  registerDriveCallbacks,
-  registerRenameCallbacks,
-  registerBatchRenameCallbacks,
-} from "./commands/drive.js";
-import {
-  registerClipCommands,
-  registerClipCallbacks,
-  registerAnalysisRenameCallback,
-} from "./commands/clips.js";
+import { registerDriveCommands, registerDriveCallbacks } from "./commands/drive.js";
+import { registerClipCommands, registerClipCallbacks } from "./commands/clips.js";
 import { registerUploadHandlers } from "./handlers/uploads.js";
 import { registerTextHandler } from "./handlers/text.js";
 import { registerApprovalCallbacks } from "./callbacks.js";
@@ -68,11 +59,8 @@ export function createBot(): Telegraf {
   registerNewsletterCommand(bot);
   registerDriveCommands(bot);
   registerDriveCallbacks(bot);
-  registerRenameCallbacks(bot);
-  registerBatchRenameCallbacks(bot);
   registerClipCommands(bot);
   registerClipCallbacks(bot);
-  registerAnalysisRenameCallback(bot);
   registerApprovalCallbacks(bot);
 
   // Upload/text handlers must be registered last so command handlers match first.

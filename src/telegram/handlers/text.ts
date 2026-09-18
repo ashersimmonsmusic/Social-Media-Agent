@@ -4,8 +4,7 @@ import { ingestText } from "../../modules/assets/asset.service.js";
 import { checkBrandCompliance } from "../../modules/brand/brand.service.js";
 import { getApproval, updateApprovalPayload, type ApprovalPayload } from "../../modules/approvals/approval.service.js";
 import { renderApprovalMessage } from "../approvals.render.js";
-import { takeAwaitingEdit, takeAwaitingRename } from "../editState.js";
-import { applyRename } from "../commands/drive.js";
+import { takeAwaitingEdit } from "../editState.js";
 import { COMMANDS } from "../commands/trigger.js";
 import { converseWithAsher } from "../../ai/ConversationService.js";
 import { BudgetExceededError } from "../../ai/budget.js";
@@ -19,14 +18,6 @@ export function registerTextHandler(bot: Telegraf) {
   bot.on(message("text"), async (ctx) => {
     const chatId = String(ctx.chat.id);
     const text = ctx.message.text;
-
-    // Checked before anything else: he has just been asked a direct question and
-    // his answer should not be read as conversation, or saved to the library.
-    const pendingRename = takeAwaitingRename(chatId);
-    if (pendingRename) {
-      await applyRename(ctx, pendingRename.fileId, text);
-      return;
-    }
 
     const awaitingApprovalId = takeAwaitingEdit(chatId);
     if (awaitingApprovalId) {

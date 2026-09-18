@@ -3,7 +3,6 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { env } from "../../config/env.js";
 import { getAccessToken } from "../oauth/google.service.js";
-import { recordAudit } from "../audit/audit.service.js";
 import { isServiceAccountConfigured, serviceAccountEmail } from "../oauth/serviceAccount.js";
 
 export interface DriveVideo {
@@ -220,63 +219,6 @@ export async function downloadToFile(fileId: string, destination: string, maxByt
 
   await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(destination));
   return meta;
-}
-
-/**
- * Renames one file. The only write this app makes to Drive.
- *
- * Deliberately narrow: it sends `name` and nothing else, so it cannot move a
- * file, change its contents, or trash it, whatever the granted scope would
- * allow. The previous name goes into the audit log, which is what makes this
- * reversible — a rename is otherwise silent and hard to undo from memory.
- */
-export async function renameFile(fileId: string, newName: string): Promise<{ from: string; to: string }> {
-  const trimmed = newName.trim();
-  if (!trimmed) throw new DriveError("A file needs a name — I can't set it to nothing.");
-  if (trimmed.length > 200) throw new DriveError("That name is too long; keep it under 200 characters.");
-  // A name with a slash in it reads as a path and confuses every tool that
-  // touches the file afterwards, including this one.
-  if (/[/\\]/.test(trimmed)) throw new DriveError("A file name can't contain slashes.");
-
-  const existing = await getVideo(fileId);
-
-  // Losing the extension makes the file unopenable on most systems, and the
-  // model writing a friendly name will not think to keep it.
-  const extension = existing.name.includes(".") ? existing.name.slice(existing.name.lastIndexOf(".")) : "";
-  const finalName = extension && !trimmed.toLowerCase().endsWith(extension.toLowerCase())
-    ? `${trimmed}${extension}`
-    : trimmed;
-
-  if (finalName === existing.name) return { from: existing.name, to: finalName };
-
-  const token = await getAccessToken();
-  const url = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`);
-  url.searchParams.set("supportsAllDrives", "true");
-  url.searchParams.set("fields", "id,name");
-
-  const response = await fetch(url, {
-    method: "PATCH",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ name: finalName }),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new DriveError(
-      response.status === 403
-        ? `Google won't let me rename ${existing.name}. If you connected before I could write to Drive, run /drive again to re-approve.`
-        : `Google refused the rename (${response.status}): ${text.slice(0, 200)}`,
-    );
-  }
-
-  await recordAudit({
-    action: "drive.file_renamed",
-    entityType: "DriveFile",
-    entityId: fileId,
-    actorType: "AI",
-    details: { from: existing.name, to: finalName },
-  });
-
-  return { from: existing.name, to: finalName };
 }
 
 export function formatDuration(millis?: number): string {

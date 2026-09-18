@@ -9,8 +9,6 @@ import { downloadToFile, getVideo } from "../drive/drive.service.js";
 import { transcriber } from "../transcription/index.js";
 import type { TranscriptCue } from "../transcription/types.js";
 import { assertRoomFor, probe, withTempDir } from "../video/ffmpeg.js";
-import { looksUnnamed, suggestFromTranscript } from "../drive/naming.service.js";
-import { renameFile } from "../drive/drive.service.js";
 import { cutClip, extractJobAudio } from "./cut.service.js";
 import { analyseTranscript } from "./detect.service.js";
 
@@ -228,11 +226,6 @@ export async function processVideo(videoId: string, telegram?: Telegram): Promis
     logger.info("clipping.video_complete", { videoId, clips: clips.length, cut });
     if (telegram) await sendPlainMessage(telegram, formatFinished(video.filename, clips, cut));
 
-    // The one moment renaming is free and well-informed: the transcript is
-    // already here, and a file called 00066.MTS has just been read end to end.
-    if (telegram && looksUnnamed(video.filename)) {
-      await offerRename(videoId, video.driveFileId, video.filename, telegram);
-    }
   });
 }
 
@@ -311,57 +304,4 @@ export function startClippingWorker(telegram: Telegram, intervalMs = 60_000) {
 export function stopClippingWorker() {
   if (timer) clearInterval(timer);
   timer = null;
-}
-
-/**
- * Suggests a better filename once a video has been read.
- *
- * Offered, never applied. Renaming is the only change the bot can make to his
- * Drive and it should stay something he agreed to — but suggesting it here
- * costs nothing, since the transcript that makes it possible has already been
- * paid for.
- */
-async function offerRename(
-  videoId: string,
-  driveFileId: string,
-  currentName: string,
-  telegram: Telegram,
-): Promise<void> {
-  try {
-    const suggested = await suggestFromTranscript(driveFileId);
-    if (!suggested) return;
-
-    await prisma.sourceVideo.update({ where: { id: videoId }, data: { statusDetail: null } });
-    await telegram.sendMessage(
-      env.TELEGRAM_ALLOWED_CHAT_ID,
-      [
-        `While I was in there — that file is still called ${currentName}.`,
-        "",
-        `I'd call it: ${suggested}`,
-        "",
-        "Want me to rename it in Drive?",
-      ].join("\n"),
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Yes, rename it", callback_data: `rna:${driveFileId}` }],
-          ],
-        },
-      },
-    );
-  } catch (error) {
-    // A naming suggestion is a nicety; it must never mark a finished analysis
-    // as failed.
-    logger.warn("clipping.rename_offer_failed", { videoId, error: String(error) });
-  }
-}
-
-/** Applies a rename he agreed to from the post-analysis offer. */
-export async function applyOfferedRename(driveFileId: string): Promise<{ from: string; to: string } | null> {
-  const suggested = await suggestFromTranscript(driveFileId);
-  if (!suggested) return null;
-
-  const result = await renameFile(driveFileId, suggested);
-  await prisma.sourceVideo.updateMany({ where: { driveFileId }, data: { filename: result.to } });
-  return result;
 }
