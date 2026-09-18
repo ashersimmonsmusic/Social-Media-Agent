@@ -262,8 +262,12 @@ Drop clips into that folder. Then send:
 
 You get a tappable list. Tap a clip and it comes back vertical, ready to watch.
 
+`/rename` gives you the same tappable list, and offers to work out a name from
+the footage itself — free once a video has been analysed, since it already has
+the transcript. It suggests; you tap to accept or type your own.
+
 You can also ask in plain words — *"rename that first one to Louisiana live
-keys"* — and the bot will tidy your Drive for you. Renaming is the only change
+keys"*. Renaming is the only change
 it can make there: it cannot move, delete or alter a file, and every rename is
 logged with the previous name so it can be undone.
 

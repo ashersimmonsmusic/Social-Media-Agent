@@ -3,7 +3,7 @@ import { prisma } from "../../db/prisma.js";
 import { storage } from "../../storage/index.js";
 import { logger } from "../../lib/logger.js";
 import { getAsset } from "../../modules/assets/asset.service.js";
-import { queueVideo, runNextClippingJob } from "../../modules/clipping/job.service.js";
+import { applyOfferedRename, queueVideo, runNextClippingJob } from "../../modules/clipping/job.service.js";
 import {
   decideClip,
   formatClip,
@@ -266,6 +266,29 @@ async function showClips(ctx: Context, sortBy: SortBy): Promise<void> {
       });
     }
   }
+}
+
+/** Handles "yes, rename it" from the message sent after an analysis. */
+export function registerAnalysisRenameCallback(bot: Telegraf) {
+  bot.on("callback_query", async (ctx, next) => {
+    const data = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+    if (!data || !data.startsWith("rna:")) return next();
+
+    const driveFileId = data.slice("rna:".length);
+    await ctx.answerCbQuery("Renaming…");
+    await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+
+    try {
+      const result = await applyOfferedRename(driveFileId);
+      await ctx.reply(
+        result ? `Renamed:\n\n${result.from}\n  ↓\n${result.to}` : "I couldn't work out a name for that after all.",
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.error("clips.rename_failed", { error: detail });
+      await ctx.reply(`I couldn't rename it: ${detail}`);
+    }
+  });
 }
 
 /** Handles the select and reject buttons under each clip. */

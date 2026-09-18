@@ -22,7 +22,8 @@ import { prepareVideoForReels, formatPreparedVideo } from "../../modules/video/v
 import { VideoToolError } from "../../modules/video/ffmpeg.js";
 import type { ReframeMode } from "../../modules/video/reframe.service.js";
 import { sendVideoPreview } from "../notify.js";
-import { setAwaitingRename } from "../editState.js";
+import { setAwaitingRename, takeAwaitingRename } from "../editState.js";
+import { suggestName, looksUnnamed, NamingError } from "../../modules/drive/naming.service.js";
 import { storage } from "../../storage/index.js";
 import { getAsset } from "../../modules/assets/asset.service.js";
 import { logger } from "../../lib/logger.js";
@@ -314,7 +315,80 @@ export function registerRenameCallbacks(bot: Telegraf) {
 
     setAwaitingRename(chatId, fileId, currentName);
     await ctx.reply(
-      `Currently "${currentName}".\n\nWhat should I call it? Send the new name — no need for the .mp4, I'll keep it.`,
+      [
+        `Currently "${currentName}".`,
+        "",
+        "Send me a name, or let me work one out from the footage.",
+      ].join("\n"),
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: "Suggest a name", callback_data: `rns:${fileId}` }]],
+        },
+      },
     );
+  });
+
+  // Working out a name, then offering it rather than applying it. Renaming is
+  // the one change the bot can make to his Drive, and it should stay something
+  // he agreed to rather than something that happened.
+  bot.on("callback_query", async (ctx, next) => {
+    const data = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+    if (!data || !data.startsWith("rns:")) return next();
+
+    const fileId = data.slice("rns:".length);
+    await ctx.answerCbQuery("Having a look…");
+    await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+
+    try {
+      await ctx.sendChatAction("typing");
+      const suggestion = await suggestName(fileId);
+      if (!suggestion) {
+        await ctx.reply("I couldn't tell what that one is from looking at it. What would you call it?");
+        return;
+      }
+
+      // Kept pending, so typing something else still works as an override.
+      setAwaitingRename(String(ctx.chat?.id ?? ""), fileId, suggestion.name);
+      await ctx.reply(
+        [
+          `How about:`,
+          "",
+          suggestion.name,
+          "",
+          suggestion.basis === "transcript"
+            ? "(from what's said in it)"
+            : "(from a few frames — I haven't heard it)",
+          "",
+          "Tap to use it, or just send me a different name.",
+        ].join("\n"),
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "Use this name", callback_data: `rnu:${fileId}` }],
+            ],
+          },
+        },
+      );
+    } catch (error) {
+      await ctx.reply(
+        error instanceof NamingError ? error.message : `I couldn't work out a name: ${String(error)}`,
+      );
+    }
+  });
+
+  bot.on("callback_query", async (ctx, next) => {
+    const data = "data" in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+    if (!data || !data.startsWith("rnu:")) return next();
+
+    const fileId = data.slice("rnu:".length);
+    const pending = takeAwaitingRename(String(ctx.chat?.id ?? ""));
+    await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+
+    if (!pending || pending.fileId !== fileId) {
+      await ctx.reply("That suggestion has gone — send /rename to start again.");
+      return;
+    }
+    await applyRename(ctx, fileId, pending.currentName);
   });
 }
